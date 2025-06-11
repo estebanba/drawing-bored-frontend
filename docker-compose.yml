@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8080:80"  # Direct port mapping - bypass Traefik entirely
+    networks:
+      - coolify
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - VITE_API_URL=http://noo80kso408o0ww8c4wggkk4.188.245.207.223.sslip.io
+      - VITE_APP_NAME=Vite TypeScript Frontend
+
+networks:
+  coolify:
+    external: true 
