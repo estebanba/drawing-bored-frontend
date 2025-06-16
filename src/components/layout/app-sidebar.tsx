@@ -31,7 +31,11 @@ import {
   CornerDownRight,
   Grid3X3,
   Spline,
-  Cog
+  Cog,
+  Moon,
+  Sun,
+  HelpCircle,
+  Info
 } from "lucide-react"
 
 import {
@@ -144,6 +148,12 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   onToggleIntersections?: () => void
   currentConstruction?: string | null
   showGeometryTools?: boolean
+  isDarkMode?: boolean
+  onToggleDarkMode?: () => void
+  showHelpOverlay?: boolean
+  onToggleHelpOverlay?: () => void
+  showInfoPanel?: boolean
+  onToggleInfoPanel?: () => void
 }
 
 /**
@@ -158,9 +168,16 @@ export function AppSidebar({
   onToggleIntersections,
   currentConstruction,
   showGeometryTools,
+  isDarkMode,
+  onToggleDarkMode,
+  showHelpOverlay,
+  onToggleHelpOverlay,
+  showInfoPanel,
+  onToggleInfoPanel,
   ...props 
 }: AppSidebarProps) {
   const [constructionsOpen, setConstructionsOpen] = React.useState(false)
+  const [settingsOpen, setSettingsOpen] = React.useState(false)
 
   return (
     <TooltipProvider>
@@ -383,6 +400,88 @@ export function AppSidebar({
                           </Tooltip>
                         </SidebarMenuItem>
                       ))}
+                    </SidebarMenu>
+                  </CollapsibleContent>
+                </SidebarGroup>
+              </Collapsible>
+
+              <SidebarSeparator />
+
+              {/* Settings - Collapsible */}
+              <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen}>
+                <SidebarGroup>
+                  <SidebarGroupLabel asChild>
+                    <CollapsibleTrigger className="flex w-full items-center justify-between text-xs font-medium text-sidebar-muted-foreground hover:text-sidebar-foreground">
+                      Settings
+                      {settingsOpen ? (
+                        <ChevronDown className="size-3" />
+                      ) : (
+                        <ChevronRight className="size-3" />
+                      )}
+                    </CollapsibleTrigger>
+                  </SidebarGroupLabel>
+                  <CollapsibleContent>
+                    <SidebarMenu className="gap-1 mt-2">
+                      {/* Dark Mode Toggle */}
+                      <SidebarMenuItem>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <SidebarMenuButton
+                              onClick={onToggleDarkMode}
+                              className="h-8 justify-start"
+                              size="sm"
+                            >
+                              {isDarkMode ? (
+                                <Sun className="size-4" />
+                              ) : (
+                                <Moon className="size-4" />
+                              )}
+                              <span className="text-xs">{isDarkMode ? 'Light Mode' : 'Dark Mode'}</span>
+                            </SidebarMenuButton>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                            <p>Toggle {isDarkMode ? 'light' : 'dark'} mode</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </SidebarMenuItem>
+
+                      {/* Help Overlay Toggle */}
+                      <SidebarMenuItem>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <SidebarMenuButton
+                              onClick={onToggleHelpOverlay}
+                              className={`h-8 justify-start ${showHelpOverlay ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
+                              size="sm"
+                            >
+                              <HelpCircle className="size-4" />
+                              <span className="text-xs">Help & Shortcuts</span>
+                            </SidebarMenuButton>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                            <p>Show help overlay</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </SidebarMenuItem>
+
+                      {/* Info Panel Toggle */}
+                      <SidebarMenuItem>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <SidebarMenuButton
+                              onClick={onToggleInfoPanel}
+                              className={`h-8 justify-start ${showInfoPanel ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
+                              size="sm"
+                            >
+                              <Info className="size-4" />
+                              <span className="text-xs">Canvas Info</span>
+                            </SidebarMenuButton>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                            <p>Toggle info panel</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </SidebarMenuItem>
                     </SidebarMenu>
                   </CollapsibleContent>
                 </SidebarGroup>
