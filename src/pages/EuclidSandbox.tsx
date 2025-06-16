@@ -484,24 +484,25 @@ export function EuclidSandbox() {
           showInfoPanel={showInfoPanel}
           onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)}
         />
+        
+        {/* Floating Sidebar Toggle - positioned outside sidebar on main canvas */}
+        <Button
+          onClick={() => {
+            const sidebar = document.querySelector('[data-sidebar="sidebar"]')
+            sidebar?.setAttribute('data-state', 
+              sidebar.getAttribute('data-state') === 'collapsed' ? 'expanded' : 'collapsed'
+            )
+          }}
+          variant="outline"
+          size="sm"
+          className="absolute top-4 left-4 z-20 shadow-lg bg-background/95 backdrop-blur-sm"
+        >
+          <Menu className="h-4 w-4" />
+        </Button>
+        
         <SidebarInset className="flex-1 relative">
           {/* Canvas Container - Full height without header */}
           <div className="flex-1 relative h-screen">
-            {/* Floating Sidebar Toggle - positioned above zoom toolbar */}
-            <Button
-              onClick={() => {
-                const sidebar = document.querySelector('[data-sidebar="sidebar"]')
-                sidebar?.setAttribute('data-state', 
-                  sidebar.getAttribute('data-state') === 'collapsed' ? 'expanded' : 'collapsed'
-                )
-              }}
-              variant="outline"
-              size="sm"
-              className="absolute top-4 left-4 z-10 shadow-lg bg-background/95 backdrop-blur-sm"
-            >
-              <Menu className="h-4 w-4" />
-            </Button>
-            
             <main className="flex-1 h-full">
               <ModularGeometryCanvas
                 width={1200}

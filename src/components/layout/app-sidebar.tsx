@@ -2,9 +2,6 @@
 import * as React from "react"
 import { Logotype } from "@/components/ui/logotype"
 import { 
-  LayoutDashboard, 
-  Settings,
-  Compass,
   Minus,
   RectangleHorizontal,
   Triangle,
@@ -47,9 +44,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarSeparator,
   SidebarTrigger,
 } from "../ui/sidebar"
@@ -106,39 +100,6 @@ export const constructions = [
   { id: 'angle-bisector', name: 'Angle Bisector', icon: RotateCcw },
   { id: 'intersection-demo', name: 'Intersection Demo', icon: Crosshair },
 ]
-
-/**
- * Minimal sidebar structure with just essential navigation.
- * Clean and simple structure that can be extended as needed.
- */
-const data = {
-  navMain: [
-    {
-      title: "Dashboard",
-      url: "/dashboard",
-      icon: LayoutDashboard,
-      items: [
-        { title: "Overview", url: "/dashboard" },
-      ],
-    },
-    {
-      title: "2D Board",
-      url: "/euclid-sandbox",
-      icon: Compass,
-      items: [
-        { title: "Geometry Canvas", url: "/euclid-sandbox" },
-      ],
-    },
-    {
-      title: "Settings",
-      url: "/settings",
-      icon: Settings,
-      items: [
-        { title: "General", url: "/settings/general" },
-      ],
-    },
-  ],
-}
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   selectedTool?: string
@@ -206,37 +167,6 @@ export function AppSidebar({
         
         {/* Navigation and Tools */}
         <SidebarContent>
-          {/* Main Navigation */}
-          <SidebarGroup>
-            <SidebarMenu className="gap-2">
-              {data.navMain.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <a href={item.url} className="font-medium">
-                      <item.icon className="size-4" />
-                      {item.title}
-                    </a>
-                  </SidebarMenuButton>
-                  {item.items?.length ? (
-                    <SidebarMenuSub className="ml-0 border-l-0 px-1.5">
-                      {item.items.map((item) => (
-                        <SidebarMenuSubItem key={item.title}>
-                          <SidebarMenuSubButton asChild>
-                            <a href={item.url} className="text-sidebar-muted-foreground hover:text-sidebar-foreground">
-                              {item.title}
-                            </a>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      ))}
-                    </SidebarMenuSub>
-                  ) : null}
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroup>
-
-          <SidebarSeparator />
-
           {/* CAD Toolbars - Only show when on 2D Board */}
           {showGeometryTools && (
             <>

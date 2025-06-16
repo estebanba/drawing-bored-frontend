@@ -142,11 +142,12 @@ function InfiniteGrid({ viewport, width, height, gridSize }: {
   height: number
   gridSize: number
 }) {
-  // Calculate world space bounds visible in the current viewport
-  const worldLeft = -viewport.x / viewport.scale
-  const worldTop = -viewport.y / viewport.scale
-  const worldRight = (width - viewport.x) / viewport.scale
-  const worldBottom = (height - viewport.y) / viewport.scale
+  // Calculate world space bounds visible in the current viewport with padding
+  const padding = gridSize * 2 // Add padding to extend grid beyond visible area
+  const worldLeft = (-viewport.x / viewport.scale) - padding
+  const worldTop = (-viewport.y / viewport.scale) - padding
+  const worldRight = ((width - viewport.x) / viewport.scale) + padding
+  const worldBottom = ((height - viewport.y) / viewport.scale) + padding
   
   // Calculate grid line positions in world coordinates
   const startX = Math.floor(worldLeft / gridSize) * gridSize
@@ -515,23 +516,43 @@ export function ModularGeometryCanvas({
   // Prevent browser zoom
   useEffect(() => {
     const preventZoom = (e: WheelEvent) => {
+      // Always prevent page zoom with Ctrl+wheel, but allow canvas zoom
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault()
+        e.stopPropagation()
       }
     }
 
     const preventKeyboardZoom = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '0')) {
+      // Prevent all browser zoom shortcuts
+      if ((e.ctrlKey || e.metaKey) && (
+        e.key === '+' || e.key === '-' || e.key === '0' || 
+        e.key === '=' || e.code === 'Equal' || e.code === 'Minus' ||
+        e.code === 'Digit0'
+      )) {
         e.preventDefault()
+        e.stopPropagation()
       }
     }
 
+    const preventTouchZoom = (e: TouchEvent) => {
+      if (e.touches.length > 1) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    }
+
+    // Prevent various zoom methods more comprehensively
     document.addEventListener('wheel', preventZoom, { passive: false })
-    document.addEventListener('keydown', preventKeyboardZoom)
+    document.addEventListener('keydown', preventKeyboardZoom, { passive: false })
+    document.addEventListener('touchstart', preventTouchZoom, { passive: false })
+    document.addEventListener('touchmove', preventTouchZoom, { passive: false })
 
     return () => {
       document.removeEventListener('wheel', preventZoom)
       document.removeEventListener('keydown', preventKeyboardZoom)
+      document.removeEventListener('touchstart', preventTouchZoom)
+      document.removeEventListener('touchmove', preventTouchZoom)
     }
   }, [])
 
