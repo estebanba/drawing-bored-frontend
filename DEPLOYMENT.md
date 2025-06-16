@@ -54,13 +54,13 @@ Create these environment variables in Coolify:
 
 #### **Required Variables**
 ```env
-VITE_API_URL=https://api.yourapp.com
-VITE_APP_NAME=Your App Name
+VITE_API_URL=https://api.drawing-bored.com
+VITE_APP_NAME=Drawing Bored
 ```
 
 #### **Optional Variables** (for enhanced functionality)
 ```env
-# Stripe Integration
+# Stripe Integration (if needed in future)
 VITE_STRIPE_PUBLISHABLE_KEY=pk_live_your_stripe_publishable_key
 
 # Analytics
@@ -68,9 +68,9 @@ VITE_GOOGLE_ANALYTICS_ID=G-XXXXXXXXXX
 VITE_GOOGLE_TAG_MANAGER_ID=GTM-XXXXXXX
 
 # App Configuration
-VITE_APP_DESCRIPTION=Your app description
-VITE_APP_URL=https://yourapp.com
-VITE_CONTACT_EMAIL=support@yourapp.com
+VITE_APP_DESCRIPTION=A 2D geometry and CAD drawing application for educational purposes
+VITE_APP_URL=https://drawing-bored.com
+VITE_CONTACT_EMAIL=support@drawing-bored.com
 
 # Feature Flags
 VITE_ENABLE_ANALYTICS=true
@@ -94,14 +94,14 @@ VITE_CRISP_WEBSITE_ID=your-crisp-id
    - Choose "Public Repository"
 
 3. **Repository Configuration**
-   - Repository URL: `https://github.com/yourusername/vite-ts-front`
+   - Repository URL: `https://github.com/yourusername/drawing-bored-frontend`
    - Branch: `main`
    - Build Pack: `Dockerfile`
    - Dockerfile Location: `Dockerfile` (leave default)
 
 4. **Application Settings**
-   - Name: `frontend-app`
-   - Description: `Vite TypeScript Frontend`
+   - Name: `drawing-bored-frontend`
+   - Description: `Drawing Bored - 2D Geometry & CAD Tool`
 
 ### Step 4: Configure Environment Variables
 
@@ -115,15 +115,15 @@ In Coolify application settings:
 
 1. **Add Custom Domain**
    - Go to "Domains" in your application
-   - Add domain: `yourapp.com`
-   - Add www subdomain: `www.yourapp.com`
+   - Add domain: `drawing-bored.com`
+   - Add www subdomain: `www.drawing-bored.com`
    - Coolify automatically provisions SSL
 
 2. **DNS Configuration**
    Update your domain DNS:
    ```
-   A Record: yourapp.com → YOUR_VPS_IP
-   CNAME Record: www.yourapp.com → yourapp.com
+   A Record: drawing-bored.com → YOUR_VPS_IP
+   CNAME Record: www.drawing-bored.com → drawing-bored.com
    ```
 
 ### Step 6: Deploy

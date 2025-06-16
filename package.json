@@ -1,5 +1,5 @@
 {
-  "name": "third-test-frontend",
+  "name": "drawing-bored-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -23,7 +23,6 @@
     "@tailwindcss/postcss": "^4.1.8",
     "@tailwindcss/vite": "^4.1.8",
     "autoprefixer": "^10.4.21",
-    "axios": "^1.9.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.511.0",
@@ -33,8 +32,7 @@
     "react-router-dom": "^7.6.2",
     "serve": "^14.2.4",
     "tailwind-merge": "^3.3.0",
-    "tailwindcss": "^4.1.8",
-    "zustand": "^5.0.5"
+    "tailwindcss": "^4.1.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.25.0",

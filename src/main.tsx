@@ -9,46 +9,25 @@ import { ThemeProvider } from './components/theme-provider'
 import './index.css'
 
 import { LayoutApp } from './components/layout/LayoutApp'
-import { LayoutStandard } from './components/layout/LayoutStandard'
-
-import { HomePage } from './pages/HomePage'
 import { Dashboard } from './pages/Dashboard'
-import { Signup } from './pages/Signup'
-import { Login } from './pages/Login'
+import { EuclidSandbox } from './pages/EuclidSandbox'
 import { NotFound } from './pages/NotFound'
-import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage'
-import { TermsOfServicePage } from './pages/TermsOfServicePage'
-import { FeaturesPage } from './pages/FeaturesPage'
-import { PricingPage } from './pages/PricingPage'
-import { BlogPage } from './pages/BlogPage'
-import { FAQPage } from './pages/FAQPage'
-import { AboutPage } from './pages/AboutPage'
 
+/**
+ * Simple router configuration focused on the dashboard as the main application.
+ * Clean structure without auth complexity or marketing pages.
+ */
 const router = createBrowserRouter([
-  // Marketing pages with the standard layout
-  {
-    element: <LayoutStandard />,
-    children: [
-      { path: '/', element: <HomePage /> },
-      { path: '/privacy-policy', element: <PrivacyPolicyPage /> },
-      { path: '/terms-of-service', element: <TermsOfServicePage /> },
-      { path: '/login', element: <Login /> },
-      { path: '/signup', element: <Signup /> },
-      { path: '/features', element: <FeaturesPage /> },
-      { path: '/pricing', element: <PricingPage /> },
-      { path: '/blog', element: <BlogPage /> },
-      { path: '/faq', element: <FAQPage /> },
-      { path: '/about', element: <AboutPage /> },
-    ],
-  },
-  // Authenticated app pages
+  // Main app layout with dashboard as the primary route
   {
     element: <LayoutApp />,
     children: [
+      { path: '/', element: <Dashboard /> }, // Dashboard as home page
       { path: '/dashboard', element: <Dashboard /> },
-      // Add other authenticated routes here
     ],
   },
+  // Standalone EuclidSandbox without main layout
+  { path: '/euclid-sandbox', element: <EuclidSandbox /> },
   // Catch-all not found page
   { path: '*', element: <NotFound /> },
 ])

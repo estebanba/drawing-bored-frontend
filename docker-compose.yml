@@ -9,7 +9,7 @@ services:
     environment:
       - NODE_ENV=production
       - VITE_API_URL=http://noo80kso408o0ww8c4wggkk4.188.245.207.223.sslip.io
-      - VITE_APP_NAME=Vite TypeScript Frontend
+      - VITE_APP_NAME=Drawing Bored
 
 networks:
   coolify:
