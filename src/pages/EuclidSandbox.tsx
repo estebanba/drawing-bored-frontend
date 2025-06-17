@@ -9,6 +9,7 @@ import type { GeometricElement, ToolType } from '@/types/geometry'
 import { Point2D, Line2D, Circle2D, GeometryUtils } from '@/lib/geometry'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { SidebarProvider, SidebarInset, useSidebar } from '@/components/ui/sidebar'
+import { WelcomeDialog } from '@/components/WelcomeDialog'
 
 function EuclidSandboxContent() {
   const { toggleSidebar, open, openMobile } = useSidebar()
@@ -423,6 +424,7 @@ export function EuclidSandbox() {
   return (
     <SidebarProvider defaultOpen={true}>
       <EuclidSandboxContent />
+      <WelcomeDialog />
     </SidebarProvider>
   )
 } 
