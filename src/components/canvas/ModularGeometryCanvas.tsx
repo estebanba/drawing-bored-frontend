@@ -478,8 +478,11 @@ export function ModularGeometryCanvas({
   onUndo,
   onRedo,
   canUndo = false,
-  canRedo = false
-}: GeometryCanvasProps) {
+  canRedo = false,
+  // New props for sidebar state
+  sidebarOpen,
+  sidebarOpenMobile
+}: GeometryCanvasProps & { sidebarOpen?: boolean, sidebarOpenMobile?: boolean }) {
   const isMobile = useIsMobile()
   const [isStatusExpanded, setIsStatusExpanded] = useState(false)
   const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false)
@@ -497,6 +500,15 @@ export function ModularGeometryCanvas({
   
   // Use external canvas settings if provided, otherwise use internal state
   const canvasSettings = externalCanvasSettings || canvasState.settings
+  
+  // DEBUG: Log settings to console to verify
+  useEffect(() => {
+    console.log('Canvas Settings Debug:', {
+      snapToGrid: canvasSettings.snapToGrid,
+      gridSize: canvasSettings.gridSize,
+      snapDistance: canvasSettings.snapDistance
+    })
+  }, [canvasSettings.snapToGrid, canvasSettings.gridSize, canvasSettings.snapDistance])
   
   // Canvas dimensions - either from props or auto-detected
   const [canvasDimensions, setCanvasDimensions] = useState({
@@ -535,19 +547,70 @@ export function ModularGeometryCanvas({
     }
   }, [propWidth, propHeight])
   
+  // Effect: When sidebar open/close state changes, force a resize
+  useEffect(() => {
+    // This effect runs when the sidebar is toggled (desktop or mobile)
+    // It forces the canvas to recalculate its dimensions
+    if (propWidth && propHeight) return // Don't auto-resize if fixed size
+    if (!containerRef.current) return
+    
+    // Use a timeout to ensure the layout has updated
+    const timeoutId = setTimeout(() => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        setCanvasDimensions({ width: rect.width, height: rect.height })
+      }
+    }, 100)
+    
+    return () => clearTimeout(timeoutId)
+  }, [sidebarOpen, sidebarOpenMobile])
+  
   const { width, height } = canvasDimensions
   
-  // Prevent browser zoom only on canvas SVG element
+  // Viewport state for pan/zoom
+  const [viewport, setViewport] = useState<ViewportState>({
+    x: 0,
+    y: 0,
+    scale: 1
+  })
+  
+  // Prevent browser zoom and handle touch zoom - moved here after viewport state
   useEffect(() => {
     const svgElement = svgRef.current
     if (!svgElement) return
 
+    let touchStartDistance = 0
+    let touchStartCenter = { x: 0, y: 0 }
+
     const preventZoom = (e: WheelEvent) => {
-      // Only prevent zoom when over the canvas SVG
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault()
-        e.stopPropagation()
-      }
+      // Always prevent default and implement our own zoom
+      e.preventDefault()
+      e.stopPropagation()
+      
+      // Get mouse position relative to SVG for zoom center
+      const rect = svgElement.getBoundingClientRect()
+      const mouseX = e.clientX - rect.left
+      const mouseY = e.clientY - rect.top
+      const zoomCenter = new Point2D(mouseX, mouseY)
+      
+      // Determine zoom direction
+      // For trackpad pinch (ctrlKey + wheel) or regular wheel
+      const zoomDelta = e.deltaY > 0 ? -1 : 1
+      const scaleFactor = zoomDelta > 0 ? 1.1 : 0.9
+      
+      setViewport(currentViewport => {
+        const newScale = Math.max(0.1, Math.min(10, currentViewport.scale * scaleFactor))
+        
+        // Calculate world coordinates of zoom center
+        const worldX = (zoomCenter.x - currentViewport.x) / currentViewport.scale
+        const worldY = (zoomCenter.y - currentViewport.y) / currentViewport.scale
+        
+        return {
+          scale: newScale,
+          x: zoomCenter.x - (worldX * newScale),
+          y: zoomCenter.y - (worldY * newScale)
+        }
+      })
     }
 
     const preventKeyboardZoom = (e: KeyboardEvent) => {
@@ -562,34 +625,77 @@ export function ModularGeometryCanvas({
       }
     }
 
-    const preventTouchZoom = (e: TouchEvent) => {
-      // Only prevent touch zoom on the canvas
-      if (e.touches.length > 1) {
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        const touch1 = e.touches[0]
+        const touch2 = e.touches[1]
+        touchStartDistance = Math.sqrt(
+          Math.pow(touch2.clientX - touch1.clientX, 2) + 
+          Math.pow(touch2.clientY - touch1.clientY, 2)
+        )
+        touchStartCenter = {
+          x: (touch1.clientX + touch2.clientX) / 2,
+          y: (touch1.clientY + touch2.clientY) / 2
+        }
         e.preventDefault()
-        e.stopPropagation()
+      }
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && touchStartDistance > 0) {
+        const touch1 = e.touches[0]
+        const touch2 = e.touches[1]
+        const currentDistance = Math.sqrt(
+          Math.pow(touch2.clientX - touch1.clientX, 2) + 
+          Math.pow(touch2.clientY - touch1.clientY, 2)
+        )
+        
+        const scale = currentDistance / touchStartDistance
+        if (Math.abs(scale - 1) > 0.1) { // Threshold to avoid jitter
+          const zoomDelta = scale > 1 ? 1 : -1
+          
+          // Get SVG coordinates for zoom center
+          const rect = svgElement.getBoundingClientRect()
+          const svgCenterX = touchStartCenter.x - rect.left
+          const svgCenterY = touchStartCenter.y - rect.top
+          
+          // Use current viewport state to perform zoom
+          const zoomCenter = new Point2D(svgCenterX, svgCenterY)
+          const scaleFactor = zoomDelta > 0 ? 1.1 : 0.9
+          
+          setViewport(currentViewport => {
+            const newScale = Math.max(0.1, Math.min(10, currentViewport.scale * scaleFactor))
+            const worldX = (zoomCenter.x - currentViewport.x) / currentViewport.scale
+            const worldY = (zoomCenter.y - currentViewport.y) / currentViewport.scale
+            
+            return {
+              scale: newScale,
+              x: zoomCenter.x - (worldX * newScale),
+              y: zoomCenter.y - (worldY * newScale)
+            }
+          })
+          
+          // Update start distance for next comparison
+          touchStartDistance = currentDistance
+        }
+        
+        e.preventDefault()
       }
     }
 
     // Add event listeners only to the SVG element and document for keyboard
     svgElement.addEventListener('wheel', preventZoom, { passive: false })
-    svgElement.addEventListener('touchstart', preventTouchZoom, { passive: false })
-    svgElement.addEventListener('touchmove', preventTouchZoom, { passive: false })
+    svgElement.addEventListener('touchstart', handleTouchStart, { passive: false })
+    svgElement.addEventListener('touchmove', handleTouchMove, { passive: false })
     document.addEventListener('keydown', preventKeyboardZoom, { passive: false })
 
     return () => {
       svgElement.removeEventListener('wheel', preventZoom)
-      svgElement.removeEventListener('touchstart', preventTouchZoom)
-      svgElement.removeEventListener('touchmove', preventTouchZoom)
+      svgElement.removeEventListener('touchstart', handleTouchStart)
+      svgElement.removeEventListener('touchmove', handleTouchMove)
       document.removeEventListener('keydown', preventKeyboardZoom)
     }
-  }, [])
-  
-  // Viewport state for pan/zoom
-  const [viewport, setViewport] = useState<ViewportState>({
-    x: 0,
-    y: 0,
-    scale: 1
-  })
+  }, [setViewport]) // Added proper dependency
   
   // Pan state - enhanced to track movement
   const [isPanning, setIsPanning] = useState(false)
@@ -1059,7 +1165,7 @@ export function ModularGeometryCanvas({
         canvasState.setSelectedPoints(result.newSelectedPoints)
       }
     }
-  }, [isPanning, hasMouseMoved, getMousePosition, screenToWorld, selectedTool, canvasState, findSnapPoint, onCanvasClick, onElementAdded, moveToolState, copyToolState, windowSelectionState, canvasSettings])
+  }, [isPanning, hasMouseMoved, getMousePosition, selectedTool, canvasState, findSnapPoint, onCanvasClick, onElementAdded, moveToolState, copyToolState, windowSelectionState, canvasSettings])
 
   /**
    * Handle mouse move for hover effects and panning
@@ -1124,8 +1230,9 @@ export function ModularGeometryCanvas({
       // Check if close enough to show grid snap preview
       const screenSnapDistance = canvasSettings.snapDistance
       const worldSnapDistance = screenSnapDistance / viewport.scale
+      const distance = worldPoint.distanceTo(gridSnapPoint)
       
-      if (worldPoint.distanceTo(gridSnapPoint) <= worldSnapDistance) {
+      if (distance <= worldSnapDistance) {
         hoveredGridPoint = gridSnapPoint
       }
     }
@@ -1269,19 +1376,30 @@ export function ModularGeometryCanvas({
   }, [])
 
   return (
-    <div className="relative w-full h-full bg-background overflow-hidden">
+    <div
+      className="w-full h-full rounded-xl border border-sidebar-border shadow-sm bg-background overflow-hidden"
+      ref={containerRef}
+      style={{ 
+        minHeight: '100%', 
+        maxHeight: 'calc(100vh - 1rem)', // Account for SidebarInset p-2 padding (0.5rem top + 0.5rem bottom)
+        height: 'calc(100vh - 1rem)',
+        display: 'flex',
+        flexDirection: 'column'
+      }}
+    >
       <svg
         ref={svgRef}
-        width={width}
-        height={height}
-        className="absolute inset-0 cursor-crosshair"
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${width} ${height}`}
+        className="cursor-crosshair flex-1"
         tabIndex={0}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onClick={handleCanvasClick}
         onKeyDown={handleKeyDown}
-        style={{ outline: 'none' }}
+        style={{ outline: 'none', display: 'block', minHeight: 0 }}
       >
         <defs>
           <marker
@@ -1298,17 +1416,15 @@ export function ModularGeometryCanvas({
             />
           </marker>
         </defs>
-
         <g transform={`translate(${viewport.x}, ${viewport.y}) scale(${viewport.scale})`}>
-          {canvasState.settings.showGrid && (
+          {canvasSettings.showGrid && (
             <InfiniteGrid
               viewport={viewport}
               width={width}
               height={height}
-              gridSize={canvasState.settings.gridSize}
+              gridSize={canvasSettings.gridSize}
             />
           )}
-
           <ElementCollectionRenderer
             elements={canvasState.elements}
             hoveredElement={canvasState.hover.hoveredElement}
@@ -1316,7 +1432,6 @@ export function ModularGeometryCanvas({
             showHidden={canvasState.selection.showHidden}
             selectedTool={selectedTool}
           />
-
           {showIntersections && (
             <IntersectionRenderer
               intersections={canvasState.intersections}
@@ -1325,7 +1440,6 @@ export function ModularGeometryCanvas({
               viewport={viewport}
             />
           )}
-
           <PreviewRenderer
             selectedPoints={canvasState.selectedPoints}
             selectedTool={selectedTool}
@@ -1334,22 +1448,36 @@ export function ModularGeometryCanvas({
             windowSelectionState={windowSelectionState}
             viewport={viewport}
           />
-
           <MeasurementRenderer
             measurement={canvasState.measurement}
             viewport={viewport}
           />
-
-          {canvasState.hover.hoveredGridPoint && canvasState.settings.snapToGrid && (
-            <circle
-              cx={canvasState.hover.hoveredGridPoint.x}
-              cy={canvasState.hover.hoveredGridPoint.y}
-              r={3 / viewport.scale}
-              fill={GEOMETRY_COLORS.GRID_SNAP}
-              opacity={0.8}
-            />
-          )}
         </g>
+        
+        {/* Grid snap preview - render in screen coordinates outside the transform */}
+        {canvasState.hover.hoveredGridPoint && canvasSettings.snapToGrid && (
+          <g>
+            <circle
+              cx={(canvasState.hover.hoveredGridPoint.x * viewport.scale) + viewport.x}
+              cy={(canvasState.hover.hoveredGridPoint.y * viewport.scale) + viewport.y}
+              r={6}
+              fill={GEOMETRY_COLORS.GRID_SNAP}
+              stroke="#ffffff"
+              strokeWidth={2}
+              opacity={1}
+            />
+            <circle
+              cx={(canvasState.hover.hoveredGridPoint.x * viewport.scale) + viewport.x}
+              cy={(canvasState.hover.hoveredGridPoint.y * viewport.scale) + viewport.y}
+              r={12}
+              fill="none"
+              stroke={GEOMETRY_COLORS.GRID_SNAP}
+              strokeWidth={1}
+              strokeDasharray="4,4"
+              opacity={0.5}
+            />
+          </g>
+        )}
       </svg>
       
       {/* Control buttons - moved to left side next to sidebar */}
@@ -1560,8 +1688,15 @@ export function ModularGeometryCanvas({
                   {canvasState.selection.selectedElements.length > 0 && ` | Selected: ${canvasState.selection.selectedElements.length}`}
                 </div>
                 <div>Zoom: {(viewport.scale * 100).toFixed(0)}% | Pan: ({viewport.x.toFixed(0)}, {viewport.y.toFixed(0)})
-                  {canvasState.settings.snapToGrid && <span className="text-green-600 font-medium"> | Grid Snap ON</span>}
-                  {canvasState.settings.showScale && <span className="text-blue-600 font-medium"> | Scale: {(100 / viewport.scale).toFixed(0)} units</span>}
+                  {canvasSettings.snapToGrid && <span className="text-green-600 font-medium"> | Grid Snap ON</span>}
+                  {canvasSettings.showScale && <span className="text-blue-600 font-medium"> | Scale: {(100 / viewport.scale).toFixed(0)} units</span>}
+                </div>
+                {/* Debug info for grid snap */}
+                <div className="text-xs opacity-75 text-yellow-600">
+                  Debug: snapToGrid={canvasSettings.snapToGrid ? 'true' : 'false'} | 
+                  gridSize={canvasSettings.gridSize} | 
+                  snapDistance={canvasSettings.snapDistance} | 
+                  hoveredGridPoint={canvasState.hover.hoveredGridPoint ? 'YES' : 'NO'}
                 </div>
               </div>
             )}
@@ -1576,8 +1711,15 @@ export function ModularGeometryCanvas({
                 {canvasState.selection.selectedElements.length > 0 && ` | Selected: ${canvasState.selection.selectedElements.length}`}
               </div>
               <div>Zoom: {(viewport.scale * 100).toFixed(0)}% | Pan: ({viewport.x.toFixed(0)}, {viewport.y.toFixed(0)})
-                {canvasState.settings.snapToGrid && <span className="text-green-600 font-medium"> | Grid Snap ON</span>}
-                {canvasState.settings.showScale && <span className="text-blue-600 font-medium"> | Scale: {(100 / viewport.scale).toFixed(0)} units</span>}
+                {canvasSettings.snapToGrid && <span className="text-green-600 font-medium"> | Grid Snap ON</span>}
+                {canvasSettings.showScale && <span className="text-blue-600 font-medium"> | Scale: {(100 / viewport.scale).toFixed(0)} units</span>}
+              </div>
+              {/* Debug info for grid snap */}
+              <div className="text-xs opacity-75 text-yellow-600">
+                Debug: snapToGrid={canvasSettings.snapToGrid ? 'true' : 'false'} | 
+                gridSize={canvasSettings.gridSize} | 
+                snapDistance={canvasSettings.snapDistance} | 
+                hoveredGridPoint={canvasState.hover.hoveredGridPoint ? 'YES' : 'NO'}
               </div>
               {selectedTool === 'select' && (
                 <div className="text-xs opacity-75">
