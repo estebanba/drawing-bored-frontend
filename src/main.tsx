@@ -4,7 +4,6 @@ import {
   createBrowserRouter,
   RouterProvider,
 } from 'react-router-dom'
-import { HelmetProvider } from 'react-helmet-async'
 import { ThemeProvider } from './components/theme-provider'
 import './index.css'
 
@@ -24,10 +23,8 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <HelmetProvider>
-      <ThemeProvider defaultTheme="light" storageKey="drawing-bored-ui-theme">
-        <RouterProvider router={router} />
-      </ThemeProvider>
-    </HelmetProvider>
+    <ThemeProvider defaultTheme="light" storageKey="drawing-bored-ui-theme">
+      <RouterProvider router={router} />
+    </ThemeProvider>
   </StrictMode>,
 )
