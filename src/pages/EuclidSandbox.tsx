@@ -3,15 +3,24 @@
  * CAD-style interface with full-size canvas and floating controls
  * Built with React and TypeScript for mathematical visualization
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Info, Play, X, Menu } from 'lucide-react'
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription, 
+  DialogFooter 
+} from '@/components/ui/dialog'
+import { Info, Play, X, Monitor, Smartphone, CheckCircle } from 'lucide-react'
 import { ModularGeometryCanvas } from '@/components/canvas/ModularGeometryCanvas'
 import type { GeometricElement, ToolType } from '@/types/geometry'
 import { Point2D, Line2D, Circle2D, GeometryUtils } from '@/lib/geometry'
 import { AppSidebar } from '@/components/layout/app-sidebar'
-import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
+import { SidebarProvider, SidebarInset, useSidebar } from '@/components/ui/sidebar'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 /**
  * Floating overlay component for construction steps
@@ -69,17 +78,7 @@ interface InfoPanelProps {
 
 function InfoPanel({ elements, selectedTool, isVisible, onToggle }: InfoPanelProps) {
   if (!isVisible) {
-    return (
-      <Button
-        onClick={onToggle}
-        variant="outline"
-        size="sm"
-        className="absolute top-20 left-4 shadow-lg bg-background/95 backdrop-blur-sm"
-      >
-        <Info className="h-4 w-4 mr-2" />
-        Show Info
-      </Button>
-    )
+    return null
   }
 
   return (
@@ -152,6 +151,9 @@ function HelpOverlay({ isVisible, onToggle }: { isVisible: boolean; onToggle: ()
                 <div><kbd className="bg-muted px-2 py-1 rounded">M</kbd> Measure</div>
                 <div><kbd className="bg-muted px-2 py-1 rounded">F3</kbd> Intersections</div>
                 <div><kbd className="bg-muted px-2 py-1 rounded">Esc</kbd> Clear selection</div>
+                <div><kbd className="bg-muted px-2 py-1 rounded">Ctrl+Z</kbd> Undo</div>
+                <div><kbd className="bg-muted px-2 py-1 rounded">Ctrl+Y</kbd> Redo</div>
+                <div><kbd className="bg-muted px-2 py-1 rounded">Ctrl+⇧+Z</kbd> Redo (Mac)</div>
               </div>
             </div>
           </div>
@@ -162,9 +164,94 @@ function HelpOverlay({ isVisible, onToggle }: { isVisible: boolean; onToggle: ()
 }
 
 /**
- * Main EuclidSandbox component - Professional CAD-style interface
+ * Desktop Optimization Dialog Component
+ * Advises users that the app works better on desktop with educational information
  */
-export function EuclidSandbox() {
+interface DesktopOptimizationDialogProps {
+  isOpen: boolean
+  onClose: () => void
+  onDontShowAgain?: () => void
+  isMobile: boolean
+}
+
+function DesktopOptimizationDialog({ isOpen, onClose, onDontShowAgain, isMobile }: DesktopOptimizationDialogProps) {
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <div className="flex items-center space-x-2 mb-2">
+            {isMobile ? (
+              <Smartphone className="h-5 w-5 text-orange-500" />
+            ) : (
+              <Monitor className="h-5 w-5 text-green-500" />
+            )}
+            <DialogTitle>
+              {isMobile ? "Mobile Device Detected" : "Desktop Detected"}
+            </DialogTitle>
+          </div>
+          <DialogDescription className="text-left space-y-3">
+            {isMobile ? (
+              <>
+                <p className="font-medium text-orange-600">
+                  You're using a mobile device
+                </p>
+                <p>
+                  This geometry application works best on desktop with:
+                </p>
+                <ul className="space-y-1 text-sm ml-4">
+                  <li>• <strong>Mouse precision</strong> for accurate drawing</li>
+                  <li>• <strong>Keyboard shortcuts</strong> (P, L, C, etc.) for faster workflow</li>
+                  <li>• <strong>Larger screen</strong> for complex constructions</li>
+                  <li>• <strong>Full feature set</strong> including right-click menus</li>
+                </ul>
+                <p className="text-sm text-muted-foreground">
+                  Mobile controls are available via the floating tools button, but consider using desktop for the complete experience.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium text-green-600">
+                  You're all set for the best experience
+                </p>
+                <p>
+                  This professional 2D geometry application includes:
+                </p>
+                <ul className="space-y-1 text-sm ml-4">
+                  <li>• <strong>Precision drawing</strong> with mouse control</li>
+                  <li>• <strong>CAD-style shortcuts</strong> (P=Point, L=Line, C=Circle)</li>
+                  <li>• <strong>Advanced tools</strong> for geometric constructions</li>
+                  <li>• <strong>Smart features</strong> like grid snapping and intersections</li>
+                </ul>
+                <p className="text-sm text-muted-foreground">
+                  Press <kbd className="bg-muted px-1 rounded text-xs">?</kbd> to view all keyboard shortcuts.
+                </p>
+              </>
+            )}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+          {onDontShowAgain && (
+            <Button variant="outline" onClick={onDontShowAgain} className="w-full sm:w-auto">
+              Don't show again
+            </Button>
+          )}
+          <Button onClick={onClose} className="w-full sm:w-auto">
+            <CheckCircle className="h-4 w-4 mr-2" />
+            {isMobile ? "Continue" : "Get Started"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * Main content component that uses sidebar context
+ */
+function EuclidSandboxContent() {
+  const { toggleSidebar } = useSidebar()
+  const isMobile = useIsMobile()
+  
   // Core state
   const [selectedTool, setSelectedTool] = useState<ToolType>('point')
   const [elements, setElements] = useState<GeometricElement[]>([])
@@ -174,25 +261,124 @@ export function EuclidSandbox() {
   // UI state for floating overlays
   const [showInfoPanel, setShowInfoPanel] = useState<boolean>(false)
   const [showHelpOverlay, setShowHelpOverlay] = useState<boolean>(false)
+  const [showDesktopDialog, setShowDesktopDialog] = useState<boolean>(() => {
+    // Check if user has previously chosen "don't show again"
+    try {
+      const hasSeenDialog = localStorage.getItem('euclidSandbox_hasSeenDesktopDialog')
+      return hasSeenDialog !== 'true' // Show dialog if not seen before
+    } catch {
+      return true // Show dialog by default if localStorage fails
+    }
+  })
+  
+  // Canvas settings state
+  const [canvasSettings, setCanvasSettings] = useState({
+    showGrid: true,
+    showScale: true,
+    snapToGrid: true,
+    gridSize: 20,
+    scale: 1,
+    snapDistance: 15,
+    tolerance: 10
+  })
+  
+  // Dynamic input state
+  const [dynamicInput, setDynamicInput] = useState({
+    showDynamicInput: false,
+    dynamicDistance: 100,
+    dynamicAngle: 0
+  })
   
   // Theme state
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    // Initialize based on system preference or existing class
-    return document.documentElement.classList.contains('dark') || 
-           window.matchMedia('(prefers-color-scheme: dark)').matches
+    // Initialize to light mode by default
+    return false
   })
+  
+  // Undo/Redo state
+  const [history, setHistory] = useState<GeometricElement[][]>([[]])
+  const [historyIndex, setHistoryIndex] = useState(0)
+  const [isUndoRedoOperation, setIsUndoRedoOperation] = useState(false)
+  
+  // Save current state to history when elements change
+  const saveToHistory = useCallback((elements: GeometricElement[], currentIndex: number) => {
+    setHistory(prev => {
+      const newHistory = prev.slice(0, currentIndex + 1)
+      newHistory.push([...elements])
+      // Limit history to 50 entries
+      if (newHistory.length > 50) {
+        return newHistory.slice(-50)
+      }
+      return newHistory
+    })
+    setHistoryIndex(prev => prev + 1)
+  }, [])
 
-  // Toggle dark mode
+  // Effect to track element changes and save to history
+  useEffect(() => {
+    // Don't save to history during undo/redo operations
+    if (isUndoRedoOperation) {
+      setIsUndoRedoOperation(false)
+      return
+    }
+    
+    // Only save if elements actually changed
+    const currentElements = JSON.stringify(elements)
+    const lastHistoryElements = JSON.stringify(history[historyIndex] || [])
+    
+    if (currentElements !== lastHistoryElements && elements.length >= 0) {
+      saveToHistory(elements, historyIndex)
+    }
+  }, [elements, historyIndex, history, isUndoRedoOperation, saveToHistory])
+
+  // Undo functionality
+  const handleUndo = useCallback(() => {
+    if (historyIndex > 0) {
+      setIsUndoRedoOperation(true)
+      const newIndex = historyIndex - 1
+      setHistoryIndex(newIndex)
+      setElements([...history[newIndex]])
+    }
+  }, [historyIndex, history])
+
+  // Redo functionality
+  const handleRedo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      setIsUndoRedoOperation(true)
+      const newIndex = historyIndex + 1
+      setHistoryIndex(newIndex)
+      setElements([...history[newIndex]])
+    }
+  }, [historyIndex, history])
+
+  /**
+   * Toggle dark mode
+   */
   const toggleDarkMode = () => {
     setIsDarkMode(!isDarkMode)
-    document.documentElement.classList.toggle('dark')
+    // Apply dark mode class to document
+    if (!isDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }
+
+  // Handle canvas settings changes
+  const handleCanvasSettingsChange = (newSettings: Partial<typeof canvasSettings>) => {
+    setCanvasSettings(prev => ({ ...prev, ...newSettings }))
+  }
+
+  // Handle dynamic input changes
+  const handleDynamicInputChange = (newSettings: Partial<typeof dynamicInput>) => {
+    setDynamicInput(prev => ({ ...prev, ...newSettings }))
   }
 
   // Initialize dark mode on component mount
   useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark')
-    }
+    // Ensure light mode by default - remove dark class and set state
+    document.documentElement.classList.remove('dark')
+    setIsDarkMode(false)
   }, [])
 
   // Classical geometric constructions
@@ -252,10 +438,20 @@ export function EuclidSandbox() {
             setSelectedTool('copy')
             break
           case 'z':
-            // Undo - could be implemented later
+            if (event.shiftKey) {
+              // Ctrl+Shift+Z = Redo
+              event.preventDefault()
+              handleRedo()
+            } else {
+              // Ctrl+Z = Undo
+              event.preventDefault()
+              handleUndo()
+            }
             break
           case 'y':
-            // Redo - could be implemented later
+            // Ctrl+Y = Redo (Windows style)
+            event.preventDefault()
+            handleRedo()
             break
           case 'a':
             // Select All - could be implemented later
@@ -332,7 +528,7 @@ export function EuclidSandbox() {
 
     window.addEventListener('keydown', handleKeyPress)
     return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [showIntersections])
+  }, [showIntersections, handleUndo, handleRedo])
 
   // Tool selection handler - now handles all tool groups
   const handleToolSelect = (toolId: string) => {
@@ -352,6 +548,13 @@ export function EuclidSandbox() {
    */
   const handleCanvasClick = (point: Point2D) => {
     console.log(`Clicked at: ${point.toString()}`)
+  }
+
+  /**
+   * Handle clear canvas
+   */
+  const handleClear = () => {
+    setElements([])
   }
 
   /**
@@ -466,74 +669,97 @@ export function EuclidSandbox() {
     }
   }
 
+  // Function to handle "don't show again" preference
+  const handleDontShowAgain = useCallback(() => {
+    try {
+      localStorage.setItem('euclidSandbox_hasSeenDesktopDialog', 'true')
+    } catch {
+      // Ignore localStorage errors
+    }
+    setShowDesktopDialog(false)
+  }, [])
+
   return (
-    <SidebarProvider>
-      <div className="flex h-screen w-full">
-        <AppSidebar 
-          selectedTool={selectedTool} 
-          onToolSelect={handleToolSelect}
-          onConstructionSelect={demonstrateConstruction}
-          showIntersections={showIntersections}
-          onToggleIntersections={() => setShowIntersections(!showIntersections)}
-          currentConstruction={currentConstruction}
-          showGeometryTools={true}
-          isDarkMode={isDarkMode}
-          onToggleDarkMode={toggleDarkMode}
-          showHelpOverlay={showHelpOverlay}
-          onToggleHelpOverlay={() => setShowHelpOverlay(!showHelpOverlay)}
-          showInfoPanel={showInfoPanel}
-          onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)}
+    <div className="flex h-screen w-full">
+      <AppSidebar 
+        selectedTool={selectedTool} 
+        onToolSelect={handleToolSelect}
+        onConstructionSelect={demonstrateConstruction}
+        showIntersections={showIntersections}
+        onToggleIntersections={() => setShowIntersections(!showIntersections)}
+        currentConstruction={currentConstruction}
+        showGeometryTools={true}
+        isDarkMode={isDarkMode}
+        onToggleDarkMode={toggleDarkMode}
+        showHelpOverlay={showHelpOverlay}
+        onToggleHelpOverlay={() => setShowHelpOverlay(!showHelpOverlay)}
+        showInfoPanel={showInfoPanel}
+        onToggleInfoPanel={() => setShowInfoPanel(!showInfoPanel)}
+        canvasSettings={canvasSettings}
+        onCanvasSettingsChange={handleCanvasSettingsChange}
+        dynamicInput={dynamicInput}
+        onDynamicInputChange={handleDynamicInputChange}
+      />
+      
+      <SidebarInset className="flex-1 relative">
+        {/* Canvas Container - Full height without header */}
+        <div className="flex-1 relative h-screen">
+          <main className="flex-1 h-full">
+            <ModularGeometryCanvas
+              selectedTool={selectedTool}
+              elements={elements}
+              onElementAdded={handleElementAdded}
+              onCanvasClick={handleCanvasClick}
+              onToolSelect={setSelectedTool}
+              showIntersections={showIntersections}
+              onSidebarToggle={toggleSidebar}
+              canvasSettings={canvasSettings}
+              onUndo={handleUndo}
+              onRedo={handleRedo}
+              canUndo={historyIndex > 0}
+              canRedo={historyIndex < history.length - 1}
+              onClear={handleClear}
+            />
+          </main>
+        </div>
+
+        {/* Floating overlays */}
+        <ConstructionOverlay 
+          construction={currentConstruction ? constructions.find(c => c.id === currentConstruction) || null : null}
+          onClose={() => setCurrentConstruction(null)}
         />
         
-        {/* Floating Sidebar Toggle - positioned outside sidebar on main canvas */}
-        <Button
-          onClick={() => {
-            const sidebar = document.querySelector('[data-sidebar="sidebar"]')
-            sidebar?.setAttribute('data-state', 
-              sidebar.getAttribute('data-state') === 'collapsed' ? 'expanded' : 'collapsed'
-            )
-          }}
-          variant="outline"
-          size="sm"
-          className="absolute top-4 left-4 z-20 shadow-lg bg-background/95 backdrop-blur-sm"
-        >
-          <Menu className="h-4 w-4" />
-        </Button>
+        <InfoPanel 
+          elements={elements}
+          selectedTool={selectedTool}
+          isVisible={showInfoPanel}
+          onToggle={() => setShowInfoPanel(!showInfoPanel)}
+        />
         
-        <SidebarInset className="flex-1 relative">
-          {/* Canvas Container - Full height without header */}
-          <div className="flex-1 relative h-screen">
-            <main className="flex-1 h-full">
-              <ModularGeometryCanvas
-                width={1200}
-                height={800}
-                selectedTool={selectedTool}
-                onElementAdded={handleElementAdded}
-                onCanvasClick={handleCanvasClick}
-                showIntersections={showIntersections}
-              />
-            </main>
-          </div>
+        {/* Desktop Optimization Dialog */}
+        <DesktopOptimizationDialog
+          isOpen={showDesktopDialog}
+          onClose={() => setShowDesktopDialog(false)}
+          onDontShowAgain={handleDontShowAgain}
+          isMobile={isMobile}
+        />
+        
+        {/* Help Overlay */}
+        {showHelpOverlay && (
+          <HelpOverlay isVisible={showHelpOverlay} onToggle={() => setShowHelpOverlay(false)} />
+        )}
+      </SidebarInset>
+    </div>
+  )
+}
 
-          {/* Floating overlays */}
-          <ConstructionOverlay 
-            construction={currentConstruction ? constructions.find(c => c.id === currentConstruction) || null : null}
-            onClose={() => setCurrentConstruction(null)}
-          />
-          
-          <InfoPanel 
-            elements={elements}
-            selectedTool={selectedTool}
-            isVisible={showInfoPanel}
-            onToggle={() => setShowInfoPanel(!showInfoPanel)}
-          />
-          
-          {/* Help Overlay */}
-          {showHelpOverlay && (
-            <HelpOverlay isVisible={showHelpOverlay} onToggle={() => setShowHelpOverlay(false)} />
-          )}
-        </SidebarInset>
-      </div>
+/**
+ * Main EuclidSandbox component - Professional CAD-style interface with sidebar provider
+ */
+export function EuclidSandbox() {
+  return (
+    <SidebarProvider defaultOpen={true}>
+      <EuclidSandboxContent />
     </SidebarProvider>
   )
 } 

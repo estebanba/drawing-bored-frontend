@@ -1,6 +1,8 @@
 // All sidebar UI components are now imported using a relative path to resolve linter errors.
 import * as React from "react"
 import { Logotype } from "@/components/ui/logotype"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { 
   Minus,
   RectangleHorizontal,
@@ -32,7 +34,12 @@ import {
   Moon,
   Sun,
   HelpCircle,
-  Info
+  Info,
+  Grid3x3,
+  Ruler as RulerIcon,
+  Github,
+  Linkedin,
+  Target
 } from "lucide-react"
 
 import {
@@ -45,7 +52,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
-  SidebarTrigger,
+  SidebarFooter,
 } from "../ui/sidebar"
 import {
   Collapsible,
@@ -115,6 +122,36 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   onToggleHelpOverlay?: () => void
   showInfoPanel?: boolean
   onToggleInfoPanel?: () => void
+  // Canvas settings
+  canvasSettings?: {
+    showGrid: boolean
+    showScale: boolean
+    snapToGrid: boolean
+    gridSize: number
+    scale: number
+    snapDistance: number
+    tolerance: number
+  }
+  onCanvasSettingsChange?: (settings: Partial<{
+    showGrid: boolean
+    showScale: boolean
+    snapToGrid: boolean
+    gridSize: number
+    scale: number
+    snapDistance: number
+    tolerance: number
+  }>) => void
+  // Dynamic input settings
+  dynamicInput?: {
+    showDynamicInput: boolean
+    dynamicDistance: number
+    dynamicAngle?: number
+  }
+  onDynamicInputChange?: (settings: Partial<{
+    showDynamicInput: boolean
+    dynamicDistance: number
+    dynamicAngle?: number
+  }>) => void
 }
 
 /**
@@ -135,6 +172,10 @@ export function AppSidebar({
   onToggleHelpOverlay,
   showInfoPanel,
   onToggleInfoPanel,
+  canvasSettings,
+  onCanvasSettingsChange,
+  dynamicInput,
+  onDynamicInputChange,
   ...props 
 }: AppSidebarProps) {
   const [constructionsOpen, setConstructionsOpen] = React.useState(false)
@@ -144,25 +185,22 @@ export function AppSidebar({
     <TooltipProvider>
       <Sidebar variant="floating" {...props}>
         {/* Clean sidebar header with logo and app name */}
-        <SidebarHeader className="border-b border-sidebar-border">
-          <div className="flex items-center justify-between">
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton size="lg" asChild>
-                  <a href="/dashboard">
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                      <Logotype />
-                    </div>
-                    <div className="flex flex-col gap-0.5 leading-none">
-                      <span className="font-semibold">Drawing Bored</span>
-                      <span className="text-xs text-sidebar-muted-foreground">Dashboard</span>
-                    </div>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-            <SidebarTrigger className="ml-auto" />
-          </div>
+        <SidebarHeader className="border-b border-sidebar-border p-2">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton size="sm" asChild>
+                <a href="/">
+                  <div className="flex aspect-square size-6 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                    <Logotype />
+                  </div>
+                  <div className="flex flex-col gap-0 leading-none">
+                    <span className="text-sm font-semibold">Drawing Bored</span>
+                    <span className="text-xs text-sidebar-muted-foreground">Menu</span>
+                  </div>
+                </a>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
         </SidebarHeader>
         
         {/* Navigation and Tools */}
@@ -171,22 +209,22 @@ export function AppSidebar({
           {showGeometryTools && (
             <>
               {/* Draw Toolbar */}
-              <SidebarGroup>
-                <SidebarGroupLabel className="text-xs font-medium text-sidebar-muted-foreground">
+              <SidebarGroup className="py-1">
+                <SidebarGroupLabel className="text-xs font-medium text-sidebar-muted-foreground px-2 py-0.5">
                   Draw
                 </SidebarGroupLabel>
-                <SidebarMenu className="gap-1">
-                  <div className="grid grid-cols-4 gap-2 p-2">
+                <SidebarMenu className="gap-0.5">
+                  <div className="grid grid-cols-4 gap-0.5 p-0.5">
                     {drawTools.map((tool) => (
                       <Tooltip key={tool.id}>
                         <TooltipTrigger asChild>
                           <SidebarMenuItem>
                             <SidebarMenuButton
                               onClick={() => onToolSelect?.(tool.id)}
-                              className={`h-10 w-10 p-0 flex items-center justify-center ${selectedTool === tool.id ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
+                              className={`h-7 w-7 p-0 flex items-center justify-center ${selectedTool === tool.id ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
                               size="sm"
                             >
-                              <tool.icon className="size-4" />
+                              <tool.icon className="size-3" />
                             </SidebarMenuButton>
                           </SidebarMenuItem>
                         </TooltipTrigger>
@@ -199,25 +237,25 @@ export function AppSidebar({
                 </SidebarMenu>
               </SidebarGroup>
 
-              <SidebarSeparator />
+              <SidebarSeparator className="my-0.5" />
 
               {/* Modify Toolbar */}
-              <SidebarGroup>
-                <SidebarGroupLabel className="text-xs font-medium text-sidebar-muted-foreground">
+              <SidebarGroup className="py-1">
+                <SidebarGroupLabel className="text-xs font-medium text-sidebar-muted-foreground px-2 py-0.5">
                   Modify
                 </SidebarGroupLabel>
-                <SidebarMenu className="gap-1">
-                  <div className="grid grid-cols-4 gap-2 p-2">
+                <SidebarMenu className="gap-0.5">
+                  <div className="grid grid-cols-4 gap-0.5 p-0.5">
                     {modifyTools.map((tool) => (
                       <Tooltip key={tool.id}>
                         <TooltipTrigger asChild>
                           <SidebarMenuItem>
                             <SidebarMenuButton
                               onClick={() => onToolSelect?.(tool.id)}
-                              className={`h-10 w-10 p-0 flex items-center justify-center ${selectedTool === tool.id ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
+                              className={`h-7 w-7 p-0 flex items-center justify-center ${selectedTool === tool.id ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
                               size="sm"
                             >
-                              <tool.icon className="size-4" />
+                              <tool.icon className="size-3" />
                             </SidebarMenuButton>
                           </SidebarMenuItem>
                         </TooltipTrigger>
@@ -230,25 +268,25 @@ export function AppSidebar({
                 </SidebarMenu>
               </SidebarGroup>
 
-              <SidebarSeparator />
+              <SidebarSeparator className="my-0.5" />
 
               {/* Properties Toolbar */}
-              <SidebarGroup>
-                <SidebarGroupLabel className="text-xs font-medium text-sidebar-muted-foreground">
+              <SidebarGroup className="py-1">
+                <SidebarGroupLabel className="text-xs font-medium text-sidebar-muted-foreground px-2 py-0.5">
                   Properties
                 </SidebarGroupLabel>
-                <SidebarMenu className="gap-1">
-                  <div className="grid grid-cols-2 gap-2 p-2">
+                <SidebarMenu className="gap-0.5">
+                  <div className="grid grid-cols-2 gap-0.5 p-0.5">
                     {propertyTools.map((tool) => (
                       <Tooltip key={tool.id}>
                         <TooltipTrigger asChild>
                           <SidebarMenuItem>
                             <SidebarMenuButton
                               onClick={() => onToolSelect?.(tool.id)}
-                              className={`h-10 w-10 p-0 flex items-center justify-center ${selectedTool === tool.id ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
+                              className={`h-7 w-7 p-0 flex items-center justify-center ${selectedTool === tool.id ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
                               size="sm"
                             >
-                              <tool.icon className="size-4" />
+                              <tool.icon className="size-3" />
                             </SidebarMenuButton>
                           </SidebarMenuItem>
                         </TooltipTrigger>
@@ -261,27 +299,27 @@ export function AppSidebar({
                 </SidebarMenu>
               </SidebarGroup>
 
-              <SidebarSeparator />
+              <SidebarSeparator className="my-0.5" />
 
               {/* View Controls */}
-              <SidebarGroup>
-                <SidebarGroupLabel className="text-xs font-medium text-sidebar-muted-foreground">
+              <SidebarGroup className="py-1">
+                <SidebarGroupLabel className="text-xs font-medium text-sidebar-muted-foreground px-2 py-0.5">
                   View
                 </SidebarGroupLabel>
-                <SidebarMenu className="gap-1">
-                  <div className="grid grid-cols-2 gap-2 p-2">
+                <SidebarMenu className="gap-0.5">
+                  <div className="grid grid-cols-2 gap-0.5 p-0.5">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <SidebarMenuItem>
                           <SidebarMenuButton
                             onClick={onToggleIntersections}
-                            className="h-10 w-10 p-0 flex items-center justify-center"
+                            className="h-7 w-7 p-0 flex items-center justify-center"
                             size="sm"
                           >
                             {showIntersections ? (
-                              <Eye className="size-4" />
+                              <Eye className="size-3" />
                             ) : (
-                              <EyeOff className="size-4" />
+                              <EyeOff className="size-3" />
                             )}
                           </SidebarMenuButton>
                         </SidebarMenuItem>
@@ -290,17 +328,35 @@ export function AppSidebar({
                         <p>{showIntersections ? 'Hide' : 'Show'} Intersections (F3)</p>
                       </TooltipContent>
                     </Tooltip>
+                    
+                    {/* Info Panel Toggle */}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SidebarMenuItem>
+                          <SidebarMenuButton
+                            onClick={onToggleInfoPanel}
+                            className={`h-7 w-7 p-0 flex items-center justify-center ${showInfoPanel ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
+                            size="sm"
+                          >
+                            <Info className="size-3" />
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Toggle canvas info panel</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
                 </SidebarMenu>
               </SidebarGroup>
 
-              <SidebarSeparator />
+              <SidebarSeparator className="my-0.5" />
 
               {/* Classical Constructions - Collapsible */}
               <Collapsible open={constructionsOpen} onOpenChange={setConstructionsOpen}>
-                <SidebarGroup>
+                <SidebarGroup className="py-1">
                   <SidebarGroupLabel asChild>
-                    <CollapsibleTrigger className="flex w-full items-center justify-between text-xs font-medium text-sidebar-muted-foreground hover:text-sidebar-foreground">
+                    <CollapsibleTrigger className="flex w-full items-center justify-between text-xs font-medium text-sidebar-muted-foreground hover:text-sidebar-foreground px-2 py-0.5">
                       Constructions
                       {constructionsOpen ? (
                         <ChevronDown className="size-3" />
@@ -310,17 +366,17 @@ export function AppSidebar({
                     </CollapsibleTrigger>
                   </SidebarGroupLabel>
                   <CollapsibleContent>
-                    <SidebarMenu className="gap-1 mt-2">
+                    <SidebarMenu className="gap-0.5 mt-0.5">
                       {constructions.map((construction) => (
                         <SidebarMenuItem key={construction.id}>
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <SidebarMenuButton
                                 onClick={() => onConstructionSelect?.(construction.id)}
-                                className={`h-8 justify-start ${currentConstruction === construction.id ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
+                                className={`h-6 justify-start ${currentConstruction === construction.id ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
                                 size="sm"
                               >
-                                <construction.icon className="size-4" />
+                                <construction.icon className="size-3" />
                                 <span className="text-xs truncate">{construction.name}</span>
                               </SidebarMenuButton>
                             </TooltipTrigger>
@@ -335,13 +391,13 @@ export function AppSidebar({
                 </SidebarGroup>
               </Collapsible>
 
-              <SidebarSeparator />
+              <SidebarSeparator className="my-0.5" />
 
               {/* Settings - Collapsible */}
               <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen}>
-                <SidebarGroup>
+                <SidebarGroup className="py-1">
                   <SidebarGroupLabel asChild>
-                    <CollapsibleTrigger className="flex w-full items-center justify-between text-xs font-medium text-sidebar-muted-foreground hover:text-sidebar-foreground">
+                    <CollapsibleTrigger className="flex w-full items-center justify-between text-xs font-medium text-sidebar-muted-foreground hover:text-sidebar-foreground px-2 py-0.5">
                       Settings
                       {settingsOpen ? (
                         <ChevronDown className="size-3" />
@@ -351,20 +407,20 @@ export function AppSidebar({
                     </CollapsibleTrigger>
                   </SidebarGroupLabel>
                   <CollapsibleContent>
-                    <SidebarMenu className="gap-1 mt-2">
+                    <SidebarMenu className="gap-0.5 mt-0.5">
                       {/* Dark Mode Toggle */}
                       <SidebarMenuItem>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <SidebarMenuButton
                               onClick={onToggleDarkMode}
-                              className="h-8 justify-start"
+                              className="h-6 justify-start"
                               size="sm"
                             >
                               {isDarkMode ? (
-                                <Sun className="size-4" />
+                                <Sun className="size-3" />
                               ) : (
-                                <Moon className="size-4" />
+                                <Moon className="size-3" />
                               )}
                               <span className="text-xs">{isDarkMode ? 'Light Mode' : 'Dark Mode'}</span>
                             </SidebarMenuButton>
@@ -381,10 +437,10 @@ export function AppSidebar({
                           <TooltipTrigger asChild>
                             <SidebarMenuButton
                               onClick={onToggleHelpOverlay}
-                              className={`h-8 justify-start ${showHelpOverlay ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
+                              className={`h-6 justify-start ${showHelpOverlay ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
                               size="sm"
                             >
-                              <HelpCircle className="size-4" />
+                              <HelpCircle className="size-3" />
                               <span className="text-xs">Help & Shortcuts</span>
                             </SidebarMenuButton>
                           </TooltipTrigger>
@@ -394,24 +450,112 @@ export function AppSidebar({
                         </Tooltip>
                       </SidebarMenuItem>
 
-                      {/* Info Panel Toggle */}
-                      <SidebarMenuItem>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <SidebarMenuButton
-                              onClick={onToggleInfoPanel}
-                              className={`h-8 justify-start ${showInfoPanel ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
-                              size="sm"
-                            >
-                              <Info className="size-4" />
-                              <span className="text-xs">Canvas Info</span>
-                            </SidebarMenuButton>
-                          </TooltipTrigger>
-                          <TooltipContent side="right">
-                            <p>Toggle info panel</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </SidebarMenuItem>
+                      {/* Canvas Settings */}
+                      {canvasSettings && onCanvasSettingsChange && (
+                        <>
+                          {/* Show Grid Toggle */}
+                          <SidebarMenuItem>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <SidebarMenuButton
+                                  onClick={() => onCanvasSettingsChange({ showGrid: !canvasSettings.showGrid })}
+                                  className={`h-6 justify-start ${canvasSettings.showGrid ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
+                                  size="sm"
+                                >
+                                  <Grid3x3 className="size-3" />
+                                  <span className="text-xs">Show Grid</span>
+                                </SidebarMenuButton>
+                              </TooltipTrigger>
+                              <TooltipContent side="right">
+                                <p>Toggle grid visibility</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </SidebarMenuItem>
+
+                          {/* Show Scale Toggle */}
+                          <SidebarMenuItem>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <SidebarMenuButton
+                                  onClick={() => onCanvasSettingsChange({ showScale: !canvasSettings.showScale })}
+                                  className={`h-6 justify-start ${canvasSettings.showScale ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
+                                  size="sm"
+                                >
+                                  <RulerIcon className="size-3" />
+                                  <span className="text-xs">Show Scale</span>
+                                </SidebarMenuButton>
+                              </TooltipTrigger>
+                              <TooltipContent side="right">
+                                <p>Toggle scale indicator</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </SidebarMenuItem>
+
+                          {/* Snap to Grid Toggle */}
+                          <SidebarMenuItem>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <SidebarMenuButton
+                                  onClick={() => onCanvasSettingsChange({ snapToGrid: !canvasSettings.snapToGrid })}
+                                  className={`h-6 justify-start ${canvasSettings.snapToGrid ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
+                                  size="sm"
+                                >
+                                  <Crosshair className="size-3" />
+                                  <span className="text-xs">Snap to Grid</span>
+                                </SidebarMenuButton>
+                              </TooltipTrigger>
+                              <TooltipContent side="right">
+                                <p>Toggle grid snapping</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </SidebarMenuItem>
+                        </>
+                      )}
+
+                      {/* Dynamic Input Controls */}
+                      {dynamicInput && onDynamicInputChange && (selectedTool === 'line' || selectedTool === 'circle') && (
+                        <>
+                          {/* Dynamic Input Toggle */}
+                          <SidebarMenuItem>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <SidebarMenuButton
+                                  onClick={() => onDynamicInputChange({ showDynamicInput: !dynamicInput.showDynamicInput })}
+                                  className={`h-6 justify-start ${dynamicInput.showDynamicInput ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
+                                  size="sm"
+                                >
+                                  <Target className="size-3" />
+                                  <span className="text-xs">Distance Input</span>
+                                </SidebarMenuButton>
+                              </TooltipTrigger>
+                              <TooltipContent side="right">
+                                <p>Enable precise distance input for {selectedTool}s</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </SidebarMenuItem>
+
+                          {/* Distance Input Field */}
+                          {dynamicInput.showDynamicInput && (
+                            <SidebarMenuItem>
+                              <div className="px-2 py-1">
+                                <Label htmlFor="sidebar-distance" className="text-xs text-sidebar-muted-foreground">
+                                  Distance:
+                                </Label>
+                                <Input
+                                  id="sidebar-distance"
+                                  type="number"
+                                  value={dynamicInput.dynamicDistance}
+                                  onChange={(e) => onDynamicInputChange({ dynamicDistance: Number(e.target.value) })}
+                                  className="h-6 text-xs mt-1"
+                                  min="1"
+                                  max="10000"
+                                  step="1"
+                                />
+                              </div>
+                            </SidebarMenuItem>
+                          )}
+                        </>
+                      )}
                     </SidebarMenu>
                   </CollapsibleContent>
                 </SidebarGroup>
@@ -419,6 +563,43 @@ export function AppSidebar({
             </>
           )}
         </SidebarContent>
+        
+        {/* Footer with personal links */}
+        <SidebarFooter className="border-t border-sidebar-border p-2">
+          <div className="flex items-center justify-around text-xs text-sidebar-muted-foreground">
+            <div>
+              Vibe-coded by{' '}
+              <a 
+                href="https://www.estebanbasili.com" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-sidebar-foreground hover:text-sidebar-accent-foreground font-medium transition-colors"
+              >
+                Esteban
+              </a>
+            </div>
+            <div className="flex space-x-2">
+              <a 
+                href="https://github.com/estebanba" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-sidebar-muted-foreground hover:text-sidebar-foreground transition-colors"
+                title="GitHub"
+              >
+                <Github className="size-3.5" />
+              </a>
+              <a 
+                href="https://linkedin.com/in/estebanbasili" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-sidebar-muted-foreground hover:text-sidebar-foreground transition-colors"
+                title="LinkedIn"
+              >
+                <Linkedin className="size-3.5" />
+              </a>
+            </div>
+          </div>
+        </SidebarFooter>
       </Sidebar>
     </TooltipProvider>
   )

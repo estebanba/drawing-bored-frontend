@@ -67,6 +67,10 @@ export function useGeometricElements() {
     setSelectedPoints([])
   }, [])
 
+  const setElementsDirectly = useCallback((newElements: GeometricElement[]) => {
+    setElements(newElements)
+  }, [])
+
   return {
     elements,
     selectedPoints,
@@ -74,7 +78,8 @@ export function useGeometricElements() {
     addElement,
     deleteElement,
     updateElement,
-    clearElements
+    clearElements,
+    setElements: setElementsDirectly
   }
 }
 
@@ -393,6 +398,7 @@ export function useCanvasState(showIntersections: boolean = true) {
     deleteElement: geometricElements.deleteElement,
     updateElement: geometricElements.updateElement,
     clearElements: geometricElements.clearElements,
+    setElements: geometricElements.setElements,
     setSelectedPoints: geometricElements.setSelectedPoints,
     
     updateSettings: canvasSettings.updateSettings,

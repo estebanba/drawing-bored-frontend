@@ -146,12 +146,29 @@ export interface CanvasState {
  * Props for the main GeometryCanvas component
  */
 export interface GeometryCanvasProps {
-  width: number
-  height: number
+  width?: number
+  height?: number
+  elements?: GeometricElement[] // Elements state from parent for undo/redo
   selectedTool: ToolType
   onElementAdded?: (element: GeometricElement) => void
   onCanvasClick?: (point: Point2D) => void
+  onToolSelect?: (tool: ToolType) => void
+  onClear?: () => void // Callback to clear all elements and update parent state
   showIntersections?: boolean
+  onSidebarToggle?: () => void
+  canvasSettings?: {
+    showGrid: boolean
+    showScale: boolean
+    snapToGrid: boolean
+    gridSize: number
+    scale: number
+    snapDistance: number
+    tolerance: number
+  }
+  onUndo?: () => void
+  onRedo?: () => void
+  canUndo?: boolean
+  canRedo?: boolean
 }
 
 /**

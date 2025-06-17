@@ -25,7 +25,7 @@ const router = createBrowserRouter([
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <HelmetProvider>
-      <ThemeProvider defaultTheme="system" storageKey="drawing-bored-ui-theme">
+      <ThemeProvider defaultTheme="light" storageKey="drawing-bored-ui-theme">
         <RouterProvider router={router} />
       </ThemeProvider>
     </HelmetProvider>

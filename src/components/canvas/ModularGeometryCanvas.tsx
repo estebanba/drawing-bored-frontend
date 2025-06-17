@@ -9,14 +9,24 @@ import { Point2D, Vector2D, Line2D, Circle2D } from '@/lib/geometry'
 import type { GeometryCanvasProps, ToolType, IntersectionInfo, MeasurementState, GeometricElement } from '@/types/geometry'
 import { GEOMETRY_COLORS } from '@/types/geometry'
 import { useCanvasState } from '@/hooks/useCanvasState'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { ToolHandlerFactory } from '@/tools/toolHandlers'
 import { ElementCollectionRenderer } from './ElementRenderer'
 import { extractPointsFromElements, findNearestPoint } from '@/utils/elementUtils'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
-import { Settings, X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
+import { ZoomIn, ZoomOut, RotateCcw, PanelLeft, X, Undo, Redo, Palette, Info, ChevronUp, ChevronDown } from 'lucide-react'
+import { 
+  Minus,
+  Radius,
+  Triangle,
+  Dot,
+  MousePointer,
+  Move,
+  Copy,
+  Trash2,
+  Ruler
+} from 'lucide-react'
 
 /**
  * Helper function to mirror a point across a line
@@ -454,15 +464,125 @@ function MeasurementRenderer({ measurement, viewport }: {
  * Main Modular Geometry Canvas Component
  */
 export function ModularGeometryCanvas({ 
-  width, 
-  height, 
+  width: propWidth, 
+  height: propHeight, 
+  elements: parentElements, // Elements from parent for undo/redo
   selectedTool, 
   onElementAdded,
   onCanvasClick,
-  showIntersections = true
+  onToolSelect,
+  onClear,
+  showIntersections = true,
+  onSidebarToggle,
+  canvasSettings: externalCanvasSettings,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false
 }: GeometryCanvasProps) {
+  const isMobile = useIsMobile()
+  const [isStatusExpanded, setIsStatusExpanded] = useState(false)
+  const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false)
+
   const svgRef = useRef<SVGSVGElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const canvasState = useCanvasState(showIntersections)
+  
+  // Sync parent elements with canvas state for undo/redo
+  useEffect(() => {
+    if (parentElements && parentElements !== canvasState.elements) {
+      canvasState.setElements(parentElements)
+    }
+  }, [parentElements, canvasState])
+  
+  // Use external canvas settings if provided, otherwise use internal state
+  const canvasSettings = externalCanvasSettings || canvasState.settings
+  
+  // Canvas dimensions - either from props or auto-detected
+  const [canvasDimensions, setCanvasDimensions] = useState({
+    width: propWidth || 1200,
+    height: propHeight || 800
+  })
+  
+  // Auto-detect canvas dimensions when not provided as props
+  useEffect(() => {
+    if (propWidth && propHeight) {
+      setCanvasDimensions({ width: propWidth, height: propHeight })
+      return
+    }
+    
+    const updateDimensions = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        setCanvasDimensions({
+          width: rect.width,
+          height: rect.height
+        })
+      }
+    }
+    
+    // Initial size detection
+    updateDimensions()
+    
+    // Set up ResizeObserver to track container size changes
+    const resizeObserver = new ResizeObserver(updateDimensions)
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current)
+    }
+    
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [propWidth, propHeight])
+  
+  const { width, height } = canvasDimensions
+  
+  // Prevent browser zoom only on canvas SVG element
+  useEffect(() => {
+    const svgElement = svgRef.current
+    if (!svgElement) return
+
+    const preventZoom = (e: WheelEvent) => {
+      // Only prevent zoom when over the canvas SVG
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    }
+
+    const preventKeyboardZoom = (e: KeyboardEvent) => {
+      // Only prevent browser zoom shortcuts when canvas is focused
+      if (document.activeElement === svgElement && (e.ctrlKey || e.metaKey) && (
+        e.key === '+' || e.key === '-' || e.key === '0' || 
+        e.key === '=' || e.code === 'Equal' || e.code === 'Minus' ||
+        e.code === 'Digit0'
+      )) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    }
+
+    const preventTouchZoom = (e: TouchEvent) => {
+      // Only prevent touch zoom on the canvas
+      if (e.touches.length > 1) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    }
+
+    // Add event listeners only to the SVG element and document for keyboard
+    svgElement.addEventListener('wheel', preventZoom, { passive: false })
+    svgElement.addEventListener('touchstart', preventTouchZoom, { passive: false })
+    svgElement.addEventListener('touchmove', preventTouchZoom, { passive: false })
+    document.addEventListener('keydown', preventKeyboardZoom, { passive: false })
+
+    return () => {
+      svgElement.removeEventListener('wheel', preventZoom)
+      svgElement.removeEventListener('touchstart', preventTouchZoom)
+      svgElement.removeEventListener('touchmove', preventTouchZoom)
+      document.removeEventListener('keydown', preventKeyboardZoom)
+    }
+  }, [])
   
   // Viewport state for pan/zoom
   const [viewport, setViewport] = useState<ViewportState>({
@@ -471,9 +591,11 @@ export function ModularGeometryCanvas({
     scale: 1
   })
   
-  // Pan state
+  // Pan state - enhanced to track movement
   const [isPanning, setIsPanning] = useState(false)
   const [lastPanPoint, setLastPanPoint] = useState<Point2D | null>(null)
+  const [mouseDownPoint, setMouseDownPoint] = useState<Point2D | null>(null)
+  const [hasMouseMoved, setHasMouseMoved] = useState(false)
   
   // Move tool state
   const [moveToolState, setMoveToolState] = useState<{
@@ -509,52 +631,6 @@ export function ModularGeometryCanvas({
     endPoint: null,
     isLeftToRight: true
   })
-  
-  // State for UI panels
-  const [showSettings, setShowSettings] = React.useState(false)
-
-  // Prevent browser zoom
-  useEffect(() => {
-    const preventZoom = (e: WheelEvent) => {
-      // Always prevent page zoom with Ctrl+wheel, but allow canvas zoom
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault()
-        e.stopPropagation()
-      }
-    }
-
-    const preventKeyboardZoom = (e: KeyboardEvent) => {
-      // Prevent all browser zoom shortcuts
-      if ((e.ctrlKey || e.metaKey) && (
-        e.key === '+' || e.key === '-' || e.key === '0' || 
-        e.key === '=' || e.code === 'Equal' || e.code === 'Minus' ||
-        e.code === 'Digit0'
-      )) {
-        e.preventDefault()
-        e.stopPropagation()
-      }
-    }
-
-    const preventTouchZoom = (e: TouchEvent) => {
-      if (e.touches.length > 1) {
-        e.preventDefault()
-        e.stopPropagation()
-      }
-    }
-
-    // Prevent various zoom methods more comprehensively
-    document.addEventListener('wheel', preventZoom, { passive: false })
-    document.addEventListener('keydown', preventKeyboardZoom, { passive: false })
-    document.addEventListener('touchstart', preventTouchZoom, { passive: false })
-    document.addEventListener('touchmove', preventTouchZoom, { passive: false })
-
-    return () => {
-      document.removeEventListener('wheel', preventZoom)
-      document.removeEventListener('keydown', preventKeyboardZoom)
-      document.removeEventListener('touchstart', preventTouchZoom)
-      document.removeEventListener('touchmove', preventTouchZoom)
-    }
-  }, [])
 
   /**
    * Convert screen coordinates to world coordinates
@@ -593,14 +669,14 @@ export function ModularGeometryCanvas({
     const worldPoint = point
     
     // Grid snapping if enabled (highest priority)
-    if (canvasState.settings.snapToGrid) {
-      const gridSize = canvasState.settings.gridSize
+    if (canvasSettings.snapToGrid) {
+      const gridSize = canvasSettings.gridSize
       const snappedX = Math.round(worldPoint.x / gridSize) * gridSize
       const snappedY = Math.round(worldPoint.y / gridSize) * gridSize
       const gridSnapPoint = new Point2D(snappedX, snappedY)
       
       // Check if close enough to snap to grid (snap distance in screen space)
-      const screenSnapDistance = canvasState.settings.snapDistance
+      const screenSnapDistance = canvasSettings.snapDistance
       const worldSnapDistance = screenSnapDistance / viewport.scale
       
       if (worldPoint.distanceTo(gridSnapPoint) <= worldSnapDistance) {
@@ -615,10 +691,10 @@ export function ModularGeometryCanvas({
     const allPoints = [...elementPoints, ...intersectionPoints]
     
     // Find nearest point within snap distance (adjusted for zoom)
-    const snapDistance = canvasState.settings.snapDistance / viewport.scale
+    const snapDistance = canvasSettings.snapDistance / viewport.scale
     const nearestPoint = findNearestPoint(worldPoint, allPoints, snapDistance)
     return nearestPoint || worldPoint
-  }, [canvasState.elements, canvasState.intersections, canvasState.settings, viewport.scale])
+  }, [canvasState.elements, canvasState.intersections, canvasSettings, viewport.scale])
 
   /**
    * Handle zoom
@@ -640,33 +716,14 @@ export function ModularGeometryCanvas({
   }, [viewport, width, height, screenToWorld])
 
   /**
-   * Handle wheel events for canvas zooming
-   */
-  const handleWheel = useCallback((event: React.WheelEvent<SVGSVGElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-    
-    // Get mouse position for zoom center
-    const mousePos = getMousePosition(event)
-    handleZoom(-event.deltaY, mousePos)
-  }, [getMousePosition, handleZoom])
-
-  /**
-   * Reset viewport to default
-   */
-  const resetViewport = useCallback(() => {
-    setViewport({ 
-      x: 0, 
-      y: 0, 
-      scale: 1 
-    })
-  }, [])
-
-  /**
    * Handle canvas click events
    */
   const handleCanvasClick = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
-    if (isPanning) return // Don't handle clicks during panning - this fixes the panning issue
+    // Don't handle clicks during panning OR if mouse moved significantly (drag operation)
+    if (isPanning || hasMouseMoved) {
+      setHasMouseMoved(false) // Reset for next interaction
+      return
+    }
     
     const screenPoint = getMousePosition(event)
     const worldPoint = screenToWorld(screenPoint)
@@ -988,7 +1045,7 @@ export function ModularGeometryCanvas({
         canvasPoint: snappedPoint,
         elements: canvasState.elements,
         selectedPoints: canvasState.selectedPoints,
-        settings: canvasState.settings,
+        settings: canvasSettings,
         dynamicInput: canvasState.dynamicInput,
         addElement: (type, data, color) => {
           const element = canvasState.addElement(type, data, color)
@@ -1002,13 +1059,24 @@ export function ModularGeometryCanvas({
         canvasState.setSelectedPoints(result.newSelectedPoints)
       }
     }
-  }, [isPanning, getMousePosition, screenToWorld, selectedTool, canvasState, findSnapPoint, onCanvasClick, onElementAdded, moveToolState, copyToolState, windowSelectionState])
+  }, [isPanning, hasMouseMoved, getMousePosition, screenToWorld, selectedTool, canvasState, findSnapPoint, onCanvasClick, onElementAdded, moveToolState, copyToolState, windowSelectionState, canvasSettings])
 
   /**
    * Handle mouse move for hover effects and panning
    */
   const handleMouseMove = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
     const screenPoint = getMousePosition(event)
+    
+    // Check if mouse moved significantly from down point
+    if (mouseDownPoint && !isPanning) {
+      const distance = Math.sqrt(
+        Math.pow(screenPoint.x - mouseDownPoint.x, 2) + 
+        Math.pow(screenPoint.y - mouseDownPoint.y, 2)
+      )
+      if (distance > 5) { // 5 pixel threshold
+        setHasMouseMoved(true)
+      }
+    }
     
     // Handle panning
     if (isPanning && lastPanPoint) {
@@ -1039,7 +1107,7 @@ export function ModularGeometryCanvas({
     // Find what's being hovered
     const elementAtPoint = canvasState.findElementAt(worldPoint)
     const elementPoints = extractPointsFromElements(canvasState.elements)
-    const snapDistance = canvasState.settings.snapDistance / viewport.scale
+    const snapDistance = canvasSettings.snapDistance / viewport.scale
     const nearestPoint = findNearestPoint(worldPoint, elementPoints, snapDistance)
     const nearestIntersection = canvasState.intersections.find(i => 
       worldPoint.distanceTo(i.point) <= snapDistance
@@ -1047,14 +1115,14 @@ export function ModularGeometryCanvas({
     
     // Check for grid snap point if grid snapping is enabled
     let hoveredGridPoint: Point2D | null = null
-    if (canvasState.settings.snapToGrid) {
-      const gridSize = canvasState.settings.gridSize
+    if (canvasSettings.snapToGrid) {
+      const gridSize = canvasSettings.gridSize
       const snappedX = Math.round(worldPoint.x / gridSize) * gridSize
       const snappedY = Math.round(worldPoint.y / gridSize) * gridSize
       const gridSnapPoint = new Point2D(snappedX, snappedY)
       
       // Check if close enough to show grid snap preview
-      const screenSnapDistance = canvasState.settings.snapDistance
+      const screenSnapDistance = canvasSettings.snapDistance
       const worldSnapDistance = screenSnapDistance / viewport.scale
       
       if (worldPoint.distanceTo(gridSnapPoint) <= worldSnapDistance) {
@@ -1068,13 +1136,17 @@ export function ModularGeometryCanvas({
       hoveredElement: elementAtPoint?.id || null,
       hoveredGridPoint
     })
-  }, [getMousePosition, isPanning, lastPanPoint, screenToWorld, canvasState, viewport.scale, selectedTool, windowSelectionState])
+  }, [getMousePosition, mouseDownPoint, isPanning, lastPanPoint, screenToWorld, canvasState, viewport.scale, selectedTool, windowSelectionState, canvasSettings])
 
   /**
    * Handle mouse down for drag operations and panning
    */
   const handleMouseDown = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
     const screenPoint = getMousePosition(event)
+    
+    // Record mouse down point for movement tracking
+    setMouseDownPoint(screenPoint)
+    setHasMouseMoved(false)
     
     // Middle mouse button or space+click for panning
     if (event.button === 1 || (event.button === 0 && event.shiftKey)) {
@@ -1093,6 +1165,9 @@ export function ModularGeometryCanvas({
    * Handle mouse up for drag operations and panning
    */
   const handleMouseUp = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
+    // Reset mouse tracking
+    setMouseDownPoint(null)
+    
     // End panning
     if (isPanning) {
       setIsPanning(false)
@@ -1124,56 +1199,107 @@ export function ModularGeometryCanvas({
       } else if (event.key === 'v' || event.key === 'V') {
         event.preventDefault()
         canvasState.pasteElements(canvasState.addElement)
-      }
-    } else if (event.key === 'h' || event.key === 'H') {
-      if (canvasState.selection.selectedElements.length > 0) {
-        canvasState.hideSelected(canvasState.updateElement)
-      }
-    } else if (event.key === 'Escape') {
-      // Cancel any active tool states
-      if (windowSelectionState.isActive) {
-        setWindowSelectionState({
-          isActive: false,
-          startPoint: null,
-          endPoint: null,
-          isLeftToRight: true
-        })
-      } else if (moveToolState.isActive) {
-        setMoveToolState({
-          isActive: false,
-          startPoint: null,
-          elementsToMove: []
-        })
-      } else if (copyToolState.isActive) {
-        setCopyToolState({
-          isActive: false,
-          startPoint: null,
-          elementsToCopy: []
-        })
-      } else {
-        canvasState.clearSelection()
+      } else if (event.key === 'z' || event.key === 'Z') {
+        event.preventDefault()
+        if (event.shiftKey) {
+          // Ctrl+Shift+Z = Redo
+          onRedo?.()
+        } else {
+          // Ctrl+Z = Undo
+          onUndo?.()
+        }
+      } else if (event.key === 'y' || event.key === 'Y') {
+        event.preventDefault()
+        // Ctrl+Y = Redo (Windows style)
+        onRedo?.()
+      } else if (event.key === 'h' || event.key === 'H') {
+        if (canvasState.selection.selectedElements.length > 0) {
+          canvasState.hideSelected(canvasState.updateElement)
+        }
+      } else if (event.key === 'Escape') {
+        // Cancel any active tool states
+        if (windowSelectionState.isActive) {
+          setWindowSelectionState({
+            isActive: false,
+            startPoint: null,
+            endPoint: null,
+            isLeftToRight: true
+          })
+        } else if (moveToolState.isActive) {
+          setMoveToolState({
+            isActive: false,
+            startPoint: null,
+            elementsToMove: []
+          })
+        } else if (copyToolState.isActive) {
+          setCopyToolState({
+            isActive: false,
+            startPoint: null,
+            elementsToCopy: []
+          })
+        } else {
+          canvasState.clearSelection()
+        }
       }
     }
-  }, [canvasState, windowSelectionState, moveToolState, copyToolState])
+  }, [canvasState, windowSelectionState, moveToolState, copyToolState, onUndo, onRedo])
+
+  // Mobile drawing tools data
+  const mobileDrawingTools = [
+    { id: 'point', name: 'Point', icon: Dot },
+    { id: 'line', name: 'Line', icon: Minus },
+    { id: 'circle', name: 'Circle', icon: Radius },
+    { id: 'triangle', name: 'Triangle', icon: Triangle },
+    { id: 'select', name: 'Select', icon: MousePointer },
+    { id: 'move', name: 'Move', icon: Move },
+    { id: 'copy', name: 'Copy', icon: Copy },
+    { id: 'delete', name: 'Delete', icon: Trash2 },
+    { id: 'measure', name: 'Measure', icon: Ruler },
+  ]
+
+  /**
+   * Reset viewport to default
+   */
+  const resetViewport = useCallback(() => {
+    setViewport({ 
+      x: 0, 
+      y: 0, 
+      scale: 1 
+    })
+  }, [])
 
   return (
-    <div className="relative w-full h-full p-2">
+    <div className="relative w-full h-full bg-background overflow-hidden">
       <svg
         ref={svgRef}
-        width="100%"
-        height="100%"
-        className="border border-border rounded-lg bg-background cursor-crosshair w-full h-full"
-        onClick={handleCanvasClick}
-        onMouseMove={handleMouseMove}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
-        onWheel={handleWheel}
+        width={width}
+        height={height}
+        className="absolute inset-0 cursor-crosshair"
         tabIndex={0}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onClick={handleCanvasClick}
         onKeyDown={handleKeyDown}
+        style={{ outline: 'none' }}
       >
-        {/* Transform group for all geometric elements AND grid - virtual zoom */}
+        <defs>
+          <marker
+            id="arrowhead"
+            markerWidth="10"
+            markerHeight="7"
+            refX="9"
+            refY="3.5"
+            orient="auto"
+          >
+            <polygon
+              points="0 0, 10 3.5, 0 7"
+              fill={GEOMETRY_COLORS.LINE}
+            />
+          </marker>
+        </defs>
+
         <g transform={`translate(${viewport.x}, ${viewport.y}) scale(${viewport.scale})`}>
-          {/* Infinite Grid - now in world space to match elements */}
           {canvasState.settings.showGrid && (
             <InfiniteGrid
               viewport={viewport}
@@ -1182,92 +1308,84 @@ export function ModularGeometryCanvas({
               gridSize={canvasState.settings.gridSize}
             />
           )}
-          
-          {/* Render all geometric elements */}
+
           <ElementCollectionRenderer
             elements={canvasState.elements}
-            selectedElements={canvasState.selection.selectedElements}
             hoveredElement={canvasState.hover.hoveredElement}
+            selectedElements={canvasState.selection.selectedElements}
             showHidden={canvasState.selection.showHidden}
             selectedTool={selectedTool}
           />
-        </g>
-        
-        {/* Scale indicators - remain in screen space */}
-        {canvasState.settings.showScale && (
-          <g>
-            <line x1={20} y1={height - 40} x2={120} y2={height - 40} stroke="#666" strokeWidth={2} />
-            <line x1={20} y1={height - 45} x2={20} y2={height - 35} stroke="#666" strokeWidth={2} />
-            <line x1={120} y1={height - 45} x2={120} y2={height - 35} stroke="#666" strokeWidth={2} />
-            <text x={70} y={height - 20} fill="#666" fontSize={12} textAnchor="middle">
-              {(100 / viewport.scale).toFixed(0)} units
-            </text>
-          </g>
-        )}
-        
-        {/* Render intersection points (in screen space) */}
-        <IntersectionRenderer
-          intersections={canvasState.intersections}
-          hoveredIntersection={canvasState.hover.hoveredIntersection}
-          showIntersections={showIntersections}
-          viewport={viewport}
-        />
-        
-        {/* Render preview elements (in screen space) */}
-        <PreviewRenderer
-          selectedPoints={canvasState.selectedPoints}
-          selectedTool={selectedTool}
-          moveToolState={moveToolState}
-          copyToolState={copyToolState}
-          windowSelectionState={windowSelectionState}
-          viewport={viewport}
-        />
-        
-        {/* Render measurement (in screen space) */}
-        <MeasurementRenderer 
-          measurement={canvasState.measurement}
-          viewport={viewport}
-        />
-        
-        {/* Render hover point highlight */}
-        {canvasState.hover.hoveredPoint && !canvasState.hover.hoveredIntersection && (
-          <circle
-            cx={(canvasState.hover.hoveredPoint.x * viewport.scale) + viewport.x}
-            cy={(canvasState.hover.hoveredPoint.y * viewport.scale) + viewport.y}
-            r={8}
-            fill="none"
-            stroke={GEOMETRY_COLORS.SELECTION}
-            strokeWidth={2}
-            className="pointer-events-none"
+
+          {showIntersections && (
+            <IntersectionRenderer
+              intersections={canvasState.intersections}
+              hoveredIntersection={canvasState.hover.hoveredIntersection}
+              showIntersections={showIntersections}
+              viewport={viewport}
+            />
+          )}
+
+          <PreviewRenderer
+            selectedPoints={canvasState.selectedPoints}
+            selectedTool={selectedTool}
+            moveToolState={moveToolState}
+            copyToolState={copyToolState}
+            windowSelectionState={windowSelectionState}
+            viewport={viewport}
           />
-        )}
-        
-        {/* Render grid snap preview highlight */}
-        {canvasState.hover.hoveredGridPoint && canvasState.settings.snapToGrid && (
-          <g className="pointer-events-none">
-            {/* Grid snap crosshair */}
+
+          <MeasurementRenderer
+            measurement={canvasState.measurement}
+            viewport={viewport}
+          />
+
+          {canvasState.hover.hoveredGridPoint && canvasState.settings.snapToGrid && (
             <circle
-              cx={(canvasState.hover.hoveredGridPoint.x * viewport.scale) + viewport.x}
-              cy={(canvasState.hover.hoveredGridPoint.y * viewport.scale) + viewport.y}
-              r={6}
-              fill="none"
-              stroke={GEOMETRY_COLORS.GRID_SNAP}
-              strokeWidth={2}
-              strokeDasharray="4,2"
-            />
-            {/* Grid snap center dot */}
-            <circle
-              cx={(canvasState.hover.hoveredGridPoint.x * viewport.scale) + viewport.x}
-              cy={(canvasState.hover.hoveredGridPoint.y * viewport.scale) + viewport.y}
-              r={2}
+              cx={canvasState.hover.hoveredGridPoint.x}
+              cy={canvasState.hover.hoveredGridPoint.y}
+              r={3 / viewport.scale}
               fill={GEOMETRY_COLORS.GRID_SNAP}
+              opacity={0.8}
             />
-          </g>
-        )}
+          )}
+        </g>
       </svg>
       
-      {/* Zoom controls */}
-      <div className="absolute top-4 right-4 flex flex-col space-y-2">
+      {/* Control buttons - moved to left side next to sidebar */}
+      <div className="absolute top-4 left-4 flex flex-col space-y-2 z-10">
+        <Button
+          onClick={() => {
+            // Use the proper sidebar toggle function
+            onSidebarToggle?.()
+          }}
+          variant="outline"
+          size="sm"
+          className="shadow-lg bg-background/95 backdrop-blur-sm w-8 h-8 p-0"
+          title="Toggle Sidebar"
+        >
+          <PanelLeft className="h-4 w-4" />
+        </Button>
+        <Button
+          onClick={() => onUndo?.()}
+          disabled={!canUndo}
+          variant="outline"
+          size="sm"
+          className="shadow-lg bg-background/95 backdrop-blur-sm w-8 h-8 p-0"
+          title="Undo (Ctrl+Z)"
+        >
+          <Undo className="h-4 w-4" />
+        </Button>
+        <Button
+          onClick={() => onRedo?.()}
+          disabled={!canRedo}
+          variant="outline"
+          size="sm"
+          className="shadow-lg bg-background/95 backdrop-blur-sm w-8 h-8 p-0"
+          title="Redo (Ctrl+Y / Ctrl+Shift+Z)"
+        >
+          <Redo className="h-4 w-4" />
+        </Button>
         <Button
           onClick={() => handleZoom(1, new Point2D(width / 2, height / 2))}
           variant="outline"
@@ -1292,18 +1410,10 @@ export function ModularGeometryCanvas({
         >
           <RotateCcw className="h-4 w-4" />
         </Button>
-        <Button
-          onClick={() => setShowSettings(!showSettings)}
-          variant="outline"
-          size="sm"
-          className="shadow-lg bg-background/95 backdrop-blur-sm w-8 h-8 p-0"
-        >
-          <Settings className="h-4 w-4" />
-        </Button>
       </div>
 
-      {/* Canvas controls */}
-      <div className="absolute top-4 right-20 flex space-x-2">
+      {/* Canvas controls - moved to right side */}
+      <div className="absolute top-4 right-4 flex space-x-2">
         {canvasState.selection.selectedElements.length > 0 && (
           <>
             <Button
@@ -1335,7 +1445,14 @@ export function ModularGeometryCanvas({
           </Button>
         )}
         <Button
-          onClick={canvasState.clearElements}
+          onClick={() => {
+            // Use parent callback if available, otherwise fallback to internal state
+            if (onClear) {
+              onClear()
+            } else {
+              canvasState.clearElements()
+            }
+          }}
           variant="outline"
           size="sm"
           className="shadow-lg bg-background/95 backdrop-blur-sm text-red-600 hover:text-red-700"
@@ -1344,101 +1461,50 @@ export function ModularGeometryCanvas({
         </Button>
       </div>
 
-      {/* Dynamic Input Panel */}
-      {(selectedTool === 'line' || selectedTool === 'circle') && (
-        <Card className="absolute top-4 left-4 shadow-lg bg-background/95 backdrop-blur-sm">
-          <CardContent className="p-3">
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="dynamic-input"
-                checked={canvasState.dynamicInput.showDynamicInput}
-                onChange={(e) => canvasState.updateDynamicInput({ showDynamicInput: e.target.checked })}
-                className="rounded"
-              />
-              <Label htmlFor="dynamic-input" className="text-sm">Use distance input</Label>
-            </div>
-            {canvasState.dynamicInput.showDynamicInput && (
-              <div className="mt-2 flex items-center space-x-2">
-                <Label htmlFor="distance" className="text-xs">Distance:</Label>
-                <Input
-                  id="distance"
-                  type="number"
-                  value={canvasState.dynamicInput.dynamicDistance}
-                  onChange={(e) => canvasState.updateDynamicInput({ dynamicDistance: Number(e.target.value) })}
-                  className="w-20 h-6 text-xs"
-                  min="1"
-                />
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Settings Panel */}
-      {showSettings && (
-        <Card className="absolute top-16 right-4 w-64 shadow-lg bg-background/95 backdrop-blur-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium">Canvas Settings</h3>
-              <Button variant="ghost" size="sm" onClick={() => setShowSettings(false)} className="h-6 w-6 p-0">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="show-grid"
-                  checked={canvasState.settings.showGrid}
-                  onChange={(e) => canvasState.updateSettings({ showGrid: e.target.checked })}
-                />
-                <Label htmlFor="show-grid" className="text-sm">Show Grid</Label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="show-scale"
-                  checked={canvasState.settings.showScale}
-                  onChange={(e) => canvasState.updateSettings({ showScale: e.target.checked })}
-                />
-                <Label htmlFor="show-scale" className="text-sm">Show Scale</Label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="snap-to-grid"
-                  checked={canvasState.settings.snapToGrid}
-                  onChange={(e) => canvasState.updateSettings({ snapToGrid: e.target.checked })}
-                />
-                <Label htmlFor="snap-to-grid" className="text-sm">Snap to Grid</Label>
-              </div>
-              
-              <div>
-                <Label htmlFor="grid-size" className="text-sm">Grid Size:</Label>
-                <Input
-                  id="grid-size"
-                  type="number"
-                  value={canvasState.settings.gridSize}
-                  onChange={(e) => canvasState.updateSettings({ gridSize: Number(e.target.value) })}
-                  className="mt-1 h-8"
-                  min="10"
-                  max="50"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="zoom-level" className="text-sm">Zoom: {(viewport.scale * 100).toFixed(0)}%</Label>
-                <div className="text-xs text-muted-foreground mt-1">
-                  Scroll to zoom, Shift+Click to pan
+      {/* Mobile Floating Drawing Tools */}
+      {isMobile && (
+        <div className="absolute bottom-4 right-4 z-20">
+          {/* Floating Action Button */}
+          <Button
+            onClick={() => setIsToolsMenuOpen(!isToolsMenuOpen)}
+            className="w-14 h-14 rounded-full shadow-lg bg-primary hover:bg-primary/90"
+            size="lg"
+          >
+            <Palette className="h-6 w-6" />
+          </Button>
+          
+          {/* Tools Menu */}
+          {isToolsMenuOpen && (
+            <Card className="absolute bottom-16 right-0 mb-2 shadow-lg bg-background/95 backdrop-blur-sm">
+              <CardContent className="p-2">
+                <div className="grid grid-cols-3 gap-2 w-48">
+                  {mobileDrawingTools.map((tool) => {
+                    const IconComponent = tool.icon
+                    return (
+                      <Button
+                        key={tool.id}
+                        onClick={() => {
+                          // Call parent's tool selection handler
+                          if (onToolSelect) {
+                            onToolSelect(tool.id as ToolType)
+                          }
+                          setIsToolsMenuOpen(false)
+                        }}
+                        variant={selectedTool === tool.id ? "default" : "outline"}
+                        size="sm"
+                        className="flex flex-col items-center justify-center h-12 w-12 p-1"
+                        title={tool.name}
+                      >
+                        <IconComponent className="h-4 w-4" />
+                        <span className="text-xs mt-1 leading-none">{tool.name}</span>
+                      </Button>
+                    )
+                  })}
                 </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* Measurement Panel */}
@@ -1466,75 +1532,113 @@ export function ModularGeometryCanvas({
         </Card>
       )}
       
-      {/* Status information */}
-      <div className="absolute bottom-4 left-4 text-xs text-muted-foreground bg-background/90 backdrop-blur-sm px-3 py-2 rounded-lg shadow-lg border">
-        <div className="space-y-1">
-          <div>Elements: {canvasState.elements.length} | Intersections: {canvasState.intersections.length}</div>
-          <div>Tool: <span className="capitalize font-medium">{selectedTool}</span>
-            {canvasState.selectedPoints.length > 0 && ` | Selected Points: ${canvasState.selectedPoints.length}`}
-            {canvasState.selection.selectedElements.length > 0 && ` | Selected: ${canvasState.selection.selectedElements.length}`}
+      {/* Status information - Expandable on mobile */}
+      <div className={`absolute bottom-4 left-4 text-xs text-muted-foreground bg-background/90 backdrop-blur-sm rounded-lg shadow-lg border ${
+        isMobile ? 'left-4 right-4' : ''
+      }`}>
+        {isMobile ? (
+          <>
+            {/* Mobile collapsed status bar */}
+            <div 
+              className="flex items-center justify-between px-3 py-2 cursor-pointer"
+              onClick={() => setIsStatusExpanded(!isStatusExpanded)}
+            >
+              <div className="flex items-center space-x-2">
+                <Info className="h-3 w-3" />
+                <span className="font-medium">Tool: {selectedTool}</span>
+                <span>({canvasState.elements.length})</span>
+              </div>
+              {isStatusExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
+            </div>
+            
+            {/* Expanded status details */}
+            {isStatusExpanded && (
+              <div className="px-3 pb-2 space-y-1 border-t border-border/50 pt-2">
+                <div>Elements: {canvasState.elements.length} | Intersections: {canvasState.intersections.length}</div>
+                <div>Tool: <span className="capitalize font-medium">{selectedTool}</span>
+                  {canvasState.selectedPoints.length > 0 && ` | Selected Points: ${canvasState.selectedPoints.length}`}
+                  {canvasState.selection.selectedElements.length > 0 && ` | Selected: ${canvasState.selection.selectedElements.length}`}
+                </div>
+                <div>Zoom: {(viewport.scale * 100).toFixed(0)}% | Pan: ({viewport.x.toFixed(0)}, {viewport.y.toFixed(0)})
+                  {canvasState.settings.snapToGrid && <span className="text-green-600 font-medium"> | Grid Snap ON</span>}
+                  {canvasState.settings.showScale && <span className="text-blue-600 font-medium"> | Scale: {(100 / viewport.scale).toFixed(0)} units</span>}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          /* Desktop full status panel */
+          <div className="px-3 py-2">
+            <div className="space-y-1">
+              <div>Elements: {canvasState.elements.length} | Intersections: {canvasState.intersections.length}</div>
+              <div>Tool: <span className="capitalize font-medium">{selectedTool}</span>
+                {canvasState.selectedPoints.length > 0 && ` | Selected Points: ${canvasState.selectedPoints.length}`}
+                {canvasState.selection.selectedElements.length > 0 && ` | Selected: ${canvasState.selection.selectedElements.length}`}
+              </div>
+              <div>Zoom: {(viewport.scale * 100).toFixed(0)}% | Pan: ({viewport.x.toFixed(0)}, {viewport.y.toFixed(0)})
+                {canvasState.settings.snapToGrid && <span className="text-green-600 font-medium"> | Grid Snap ON</span>}
+                {canvasState.settings.showScale && <span className="text-blue-600 font-medium"> | Scale: {(100 / viewport.scale).toFixed(0)} units</span>}
+              </div>
+              {selectedTool === 'select' && (
+                <div className="text-xs opacity-75">
+                  Ctrl+Click: Multi-select | Del: Delete | H: Hide | Ctrl+C/V: Copy/Paste
+                </div>
+              )}
+              {selectedTool === 'move' && (
+                <div className="text-xs opacity-75">
+                  {moveToolState.isActive 
+                    ? `Click end point to move ${moveToolState.elementsToMove.length} element(s)` 
+                    : 'Click element or start point to begin move'}
+                </div>
+              )}
+              {selectedTool === 'copy' && (
+                <div className="text-xs opacity-75">
+                  {copyToolState.isActive 
+                    ? `Click end point to copy ${copyToolState.elementsToCopy.length} element(s)` 
+                    : 'Click element or start point to begin copy'}
+                </div>
+              )}
+              {selectedTool === 'array' && (
+                <div className="text-xs opacity-75">
+                  Select elements first, then click Array to create multiple copies
+                </div>
+              )}
+              {selectedTool === 'trim' && (
+                <div className="text-xs opacity-75">
+                  Click on line segment between intersections to trim
+                </div>
+              )}
+              {selectedTool === 'mirror' && (
+                <div className="text-xs opacity-75">
+                  {canvasState.selection.selectedElements.length > 0
+                    ? (canvasState.selectedPoints.length === 0 
+                      ? 'Click first point of mirror axis'
+                      : 'Click second point of mirror axis to mirror elements')
+                    : 'Select elements first, then define mirror axis'}
+                </div>
+              )}
+              {selectedTool === 'fillet' && (
+                <div className="text-xs opacity-75">
+                  Click two points to create a fillet with current radius
+                </div>
+              )}
+              {selectedTool === 'cogwheel' && (
+                <div className="text-xs opacity-75">
+                  {canvasState.selectedPoints.length === 0 
+                    ? 'Click center point for cog wheel'
+                    : 'Click to set outer radius and create cog wheel'}
+                </div>
+              )}
+              {selectedTool === 'select' && (
+                <div className="text-xs opacity-75">
+                  {windowSelectionState.isActive 
+                    ? `Drag to complete ${windowSelectionState.isLeftToRight ? 'window' : 'crossing'} selection` 
+                    : 'Click element or drag rectangle to select | Ctrl+Click: Multi-select | Del: Delete | H: Hide | Ctrl+C/V: Copy/Paste'}
+                </div>
+              )}
+            </div>
           </div>
-          <div>Zoom: {(viewport.scale * 100).toFixed(0)}% | Pan: ({viewport.x.toFixed(0)}, {viewport.y.toFixed(0)})
-            {canvasState.settings.snapToGrid && <span className="text-green-600 font-medium"> | Grid Snap ON</span>}
-          </div>
-          {selectedTool === 'select' && (
-            <div className="text-xs opacity-75">
-              Ctrl+Click: Multi-select | Del: Delete | H: Hide | Ctrl+C/V: Copy/Paste
-            </div>
-          )}
-          {selectedTool === 'move' && (
-            <div className="text-xs opacity-75">
-              {moveToolState.isActive 
-                ? `Click end point to move ${moveToolState.elementsToMove.length} element(s)` 
-                : 'Click element or start point to begin move'}
-            </div>
-          )}
-          {selectedTool === 'copy' && (
-            <div className="text-xs opacity-75">
-              {copyToolState.isActive 
-                ? `Click end point to copy ${copyToolState.elementsToCopy.length} element(s)` 
-                : 'Click element or start point to begin copy'}
-            </div>
-          )}
-          {selectedTool === 'array' && (
-            <div className="text-xs opacity-75">
-              Select elements first, then click Array to create multiple copies
-            </div>
-          )}
-          {selectedTool === 'trim' && (
-            <div className="text-xs opacity-75">
-              Click on line segment between intersections to trim
-            </div>
-          )}
-          {selectedTool === 'mirror' && (
-            <div className="text-xs opacity-75">
-              {canvasState.selection.selectedElements.length > 0
-                ? (canvasState.selectedPoints.length === 0 
-                  ? 'Click first point of mirror axis'
-                  : 'Click second point of mirror axis to mirror elements')
-                : 'Select elements first, then define mirror axis'}
-            </div>
-          )}
-          {selectedTool === 'fillet' && (
-            <div className="text-xs opacity-75">
-              Click two points to create a fillet with current radius
-            </div>
-          )}
-          {selectedTool === 'cogwheel' && (
-            <div className="text-xs opacity-75">
-              {canvasState.selectedPoints.length === 0 
-                ? 'Click center point for cog wheel'
-                : 'Click to set outer radius and create cog wheel'}
-            </div>
-          )}
-          {selectedTool === 'select' && (
-            <div className="text-xs opacity-75">
-              {windowSelectionState.isActive 
-                ? `Drag to complete ${windowSelectionState.isLeftToRight ? 'window' : 'crossing'} selection` 
-                : 'Click element or drag rectangle to select | Ctrl+Click: Multi-select | Del: Delete | H: Hide | Ctrl+C/V: Copy/Paste'}
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       {/* Intersection info tooltip */}
@@ -1545,4 +1649,4 @@ export function ModularGeometryCanvas({
       )}
     </div>
   )
-} 
+}
